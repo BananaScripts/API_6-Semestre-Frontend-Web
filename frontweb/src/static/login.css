@@ -9,15 +9,17 @@ html, body {
   height: 100%;
   width: 100%;
 }
-
 #login-container {
   height: 100vh;
   width: 100vw;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
   display: flex;
-  justify-content: flex-end; 
+}
+
+#login-container::before {
+  content: "";
+  flex: 1;
+  background: url("../assets/background.jpg") no-repeat center center;
+  background-size: cover;
 }
 
 .login-panel {
