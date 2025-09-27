@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../static/login.css";
+import domrockLogo from "../assets/domrock.png";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -38,6 +39,7 @@ function Login() {
     <div id="login-container">
       <div className="login-panel">
         <form id="login-form" onSubmit={handleSubmit}>
+          <img src={domrockLogo} alt="Logo DomRock" />
           <h1>Bem-vindo à Dom Rock</h1>
 
           <label htmlFor="email">Email</label>
