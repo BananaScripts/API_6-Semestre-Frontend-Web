@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import frontendAuth from '../utils/frontendAuth';
+import api from '../services/api';
 
 function Icon({ name, size = 18, color = 'currentColor' }){
   const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', xmlns: 'http://www.w3.org/2000/svg' };
@@ -22,14 +22,18 @@ export default function Settings(){
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    // Try to infer current user from local token (fw-token:<email>)
-    const token = localStorage.getItem('token') || '';
-    let email = null;
-    if (token.startsWith('fw-token:')) email = token.replace('fw-token:', '');
-    // frontendAuth stores users in localStorage; listUsers returns array
-    const all = frontendAuth.listUsers ? frontendAuth.listUsers() : [];
-    const found = all.find(u => u.email === email) || null;
-    setUser(found);
+    async function load(){
+      try{
+        const payload = api.decodeToken();
+        let found = null;
+        if (payload && payload.email){
+          const all = await api.listUsers();
+          found = all.find(u => u.email === payload.email) || null;
+        }
+        setUser(found);
+      }catch(e){ setUser(null); }
+    }
+    load();
   }, []);
 
   const handleLogout = async () => {

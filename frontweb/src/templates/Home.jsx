@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import api from '../services/api';
 
 // Inline Icon helper (small set)
 function Icon({ name, size = 18, color = 'currentColor' }){
@@ -45,14 +46,28 @@ export default function Home(){
     { id: 4, title: 'Nova Atualização', subtitle: 'Versão 2.1.0 disponível', icon: 'doc.text.fill' },
   ];
 
-  const tableData = [
-    { id: 1, name: 'João Silva', email: 'joao@email.com', status: 'Ativo', role: 'Admin', lastLogin: '2024-01-15', revenue: 'R$ 12.500' },
-    { id: 2, name: 'Maria Santos', email: 'maria@email.com', status: 'Ativo', role: 'Vendedor', lastLogin: '2024-01-14', revenue: 'R$ 8.750' },
-    { id: 3, name: 'Pedro Costa', email: 'pedro@email.com', status: 'Inativo', role: 'Vendedor', lastLogin: '2024-01-10', revenue: 'R$ 5.200' },
-    { id: 4, name: 'Ana Oliveira', email: 'ana@email.com', status: 'Ativo', role: 'Gerente', lastLogin: '2024-01-15', revenue: 'R$ 15.300' },
-    { id: 5, name: 'Carlos Lima', email: 'carlos@email.com', status: 'Ativo', role: 'Vendedor', lastLogin: '2024-01-13', revenue: 'R$ 9.800' },
-    { id: 6, name: 'Lucia Ferreira', email: 'lucia@email.com', status: 'Pendente', role: 'Vendedor', lastLogin: '2024-01-12', revenue: 'R$ 3.400' },
-  ];
+  const [tableData, setTableData] = useState([]);
+
+  // load users from API if available
+  React.useEffect(()=>{
+    let mounted = true;
+    async function load(){
+      try{
+        const users = await api.listUsers();
+        if(!mounted) return;
+        if(Array.isArray(users) && users.length) {
+          setTableData(users.map((u, i) => ({ id: u.id || i+1, name: u.nome || u.name || 'Usuário', email: u.email || '', status: 'Ativo', role: 'Usuário', lastLogin: '', revenue: '' })));
+        } else {
+          // fallback: keep empty
+          setTableData([]);
+        }
+      }catch(e){
+        setTableData([]);
+      }
+    }
+    load();
+    return ()=>{ mounted = false };
+  }, []);
 
   const sortData = (data, field, order) => {
     return [...data].sort((a,b) => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { 
   BarChart3, 
@@ -7,7 +7,11 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  TrendingUp
+  TrendingUp,
+  Upload,
+  FileText,
+  Wifi,
+  WifiOff
 } from "lucide-react";
 import {
   Sidebar,
@@ -23,6 +27,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { apiService } from "@/services/api";
 
 const navigationItems = [
   {
@@ -30,6 +35,18 @@ const navigationItems = [
     url: "/dashboard",
     icon: BarChart3,
     description: "Insights e Analytics"
+  },
+  {
+    title: "Upload",
+    url: "/upload",
+    icon: Upload,
+    description: "Importar Dados"
+  },
+  {
+    title: "Relatórios",
+    url: "/reports",
+    icon: FileText,
+    description: "Gerar Relatórios"
   },
   {
     title: "Chat IA",
@@ -56,9 +73,22 @@ const adminItems = [
 
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const location = useLocation();
   const { user } = useAuth();
   const currentPath = location.pathname;
+
+  useEffect(() => {
+    const checkConnection = async () => {
+      const connected = await apiService.checkConnectivity();
+      setIsConnected(connected);
+    };
+
+    checkConnection();
+    // Check connection every 30 seconds
+    const interval = setInterval(checkConnection, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const isActive = (path: string) => currentPath === path;
   const getNavClasses = (path: string) => 
@@ -130,8 +160,25 @@ export function AppSidebar() {
         {!collapsed && (
           <div className="mt-auto pt-4 border-t border-border/50">
             <div className="bg-gradient-to-r from-blue-dark/10 to-golden/10 p-3 rounded-lg">
-              <p className="text-xs font-medium text-foreground">Status do Sistema</p>
-              <p className="text-xs text-muted-foreground">Conectado • Dados atualizados</p>
+              <p className="text-xs font-medium text-foreground mb-2">Status do Sistema</p>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">API Backend</span>
+                  <div className="flex items-center gap-1">
+                    {isConnected === null ? (
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                    ) : isConnected ? (
+                      <Wifi className="w-3 h-3 text-green-500" />
+                    ) : (
+                      <WifiOff className="w-3 h-3 text-red-500" />
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Dados</span>
+                  <span className="text-xs text-green-600">Atualizados</span>
+                </div>
+              </div>
               <div className="mt-2 w-full bg-muted rounded-full h-1">
                 <div className="bg-blue-dark h-1 rounded-full w-3/4"></div>
               </div>

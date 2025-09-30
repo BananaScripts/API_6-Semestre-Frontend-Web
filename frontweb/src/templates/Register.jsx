@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import fwAuth from "../utils/frontendAuth";
+import api from "../services/api";
 import akasysLogo from "../assets/akasysver.png";
 import { Link } from "react-router-dom";
 
@@ -12,30 +12,12 @@ export default function Register(){
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const useFrontendAuth = process.env.REACT_APP_FRONTEND_AUTH === "true";
-    if (useFrontendAuth) {
-      const res = fwAuth.registerUser({ nome, email, senha });
-      if (!res.ok) return alert('Registro falhou: ' + (res.detail || res.status));
-      localStorage.setItem('token', res.access_token);
-      navigate('/home');
-      return;
-    }
-
-    // Backend flow
     try {
-      const regRoute = process.env.REACT_APP_REGISTER_ROUTE || '/usuario';
-      const useForm = process.env.REACT_APP_USE_FORM === 'true';
-      let response;
-      if (useForm) {
-        response = await fetch(regRoute, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ nome, email, senha }) });
-      } else {
-        response = await fetch(regRoute, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome, email, senha }) });
-      }
-      if (!response.ok) throw new Error('Registro falhou');
-      const data = await response.json();
-      if (data.access_token) localStorage.setItem('token', data.access_token);
+      const data = await api.createUser({ nome, email, senha });
+      // If backend returns token set it, otherwise prompt user to login
+      if (data && data.access_token) localStorage.setItem('token', data.access_token);
       navigate('/home');
-    } catch (err) { alert(err.message); }
+    } catch (err) { alert(err.message || 'Registro falhou'); }
   };
 
   return (

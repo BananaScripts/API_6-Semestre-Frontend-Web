@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import "../static/login.css";
-import fwAuth from "../utils/frontendAuth";
+import api from "../services/api";
 import akasysLogo from "../assets/akasysver.png";
 
 function Login() {
@@ -11,49 +11,15 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // If enabled, use the frontend-only auth helper for local/dev testing
-    const useFrontendAuth = process.env.REACT_APP_FRONTEND_AUTH === "true";
-    if (useFrontendAuth) {
-      const res = fwAuth.loginUser({ email, senha });
-      if (!res.ok) return alert(res.detail || "Falha no login");
-      localStorage.setItem("token", res.access_token);
-      navigate("/home");
-      return;
-    }
-
     try {
-      const authRoute = process.env.REACT_APP_LOGIN_ROUTE || "/login";
-      const useForm = process.env.REACT_APP_USE_FORM === "true";
-
-      let response;
-      if (useForm) {
-        response = await fetch(authRoute, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ username: email, password: senha }),
-        });
+      const data = await api.login({ email, senha });
+      if (data && data.access_token) {
+        navigate('/home');
       } else {
-        response = await fetch(authRoute, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email, senha: senha }),
-        });
+        alert('Falha no login');
       }
-
-      if (response.status === 404) {
-        throw new Error(
-          `Rota não encontrada: ${authRoute}. Verifique se o backend está executando e se a rota existe (veja reminders/ROUTES.md).`
-        );
-      }
-
-      if (!response.ok) throw new Error("Email ou senha inválidos");
-
-      const data = await response.json();
-      localStorage.setItem("token", data.access_token);
-      navigate("/home");
     } catch (err) {
-      alert(err.message);
+      alert(err.message || 'Falha no login');
     }
   };
 
