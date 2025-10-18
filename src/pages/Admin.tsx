@@ -6,6 +6,7 @@ import {
   Search, 
   MoreVertical, 
   Eye, 
+  Edit,
   Ban, 
   Trash2,
   Settings,
@@ -139,6 +140,15 @@ export default function Admin() {
           description: `Abrindo perfil de ${user?.name}`,
         });
         break;
+      case 'edit':
+        // Set form data for editing
+        setNewUser({
+          nome: foundUser?.nome || '',
+          email: foundUser?.email || '',
+          senha: ''
+        });
+        setIsCreateDialogOpen(true);
+        break;
       case 'suspend':
         setUsers(users.map(u => 
           u.id === userId 
@@ -151,12 +161,27 @@ export default function Admin() {
         });
         break;
       case 'delete':
-        setUsers(users.filter(u => u.id !== userId));
-        toast({
-          title: "Usuário removido",
-          description: `${user?.name} foi removido do sistema.`,
-          variant: "destructive",
-        });
+
+        const confirmDelete = window.confirm(`Tem certeza que deseja excluir o usuário ${foundUser?.nome}?`);
+        if (!confirmDelete) return;
+        
+        try {
+          await apiService.deleteUser(userId);
+          setUsers(users.filter(u => u.id !== userId));
+          toast({
+            title: "Usuário removido",
+            description: `${foundUser?.nome} foi removido do sistema.`,
+            variant: "destructive",
+          });
+          updateStats(users.filter(u => u.id !== userId));
+        } catch (error) {
+          toast({
+            title: "Erro ao remover usuário",
+            description: "Não foi possível remover o usuário.",
+            variant: "destructive",
+          });
+        }
+
         break;
     }
   };
@@ -204,10 +229,76 @@ export default function Admin() {
             Gerencie usuários, permissões e configurações do sistema
           </p>
         </div>
+<<<<<<< Updated upstream
         <Button variant="golden">
           <UserPlus className="mr-2 h-4 w-4" />
           Novo Usuário
         </Button>
+=======
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="golden">
+              <UserPlus className="mr-2 h-4 w-4" />
+              Novo Usuário
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {newUser.nome && newUser.email ? 'Editar Usuário' : 'Criar Novo Usuário'}
+              </DialogTitle>
+              <DialogDescription>
+                {newUser.nome && newUser.email ? 'Edite as informações do usuário.' : 'Adicione um novo usuário ao sistema.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="nome">Nome</Label>
+                <Input
+                  id="nome"
+                  value={newUser.nome}
+                  onChange={(e) => setNewUser({ ...newUser, nome: e.target.value })}
+                  placeholder="Nome completo"
+                />
+              </div>
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  placeholder="email@exemplo.com"
+                />
+              </div>
+              <div>
+                <Label htmlFor="senha">Senha</Label>
+                <Input
+                  id="senha"
+                  type="password"
+                  value={newUser.senha}
+                  onChange={(e) => setNewUser({ ...newUser, senha: e.target.value })}
+                  placeholder="Senha segura"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsCreateDialogOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleCreateUser}
+                  disabled={isCreatingUser}
+                >
+                  {isCreatingUser ? "Salvando..." : (newUser.nome && newUser.email ? "Salvar Alterações" : "Criar Usuário")}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+>>>>>>> Stashed changes
       </div>
 
       {/* Stats Grid */}
@@ -312,6 +403,10 @@ export default function Admin() {
                             <DropdownMenuItem onClick={() => handleUserAction(user.id, 'view')}>
                               <Eye className="mr-2 h-4 w-4" />
                               Visualizar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleUserAction(user.id, 'edit')}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Editar
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleUserAction(user.id, 'suspend')}>
                               <Ban className="mr-2 h-4 w-4" />

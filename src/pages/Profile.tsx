@@ -1,5 +1,9 @@
 import { useState } from "react";
+<<<<<<< Updated upstream
 import { User, Mail, Lock, Bell, Shield, Info, Save, Eye, EyeOff } from "lucide-react";
+=======
+import { User, Mail, Lock, Bell, Shield, Info, Save, Eye, EyeOff, Trash2, LogOut } from "lucide-react";
+>>>>>>> Stashed changes
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +16,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { toast } = useToast();
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -75,6 +79,33 @@ export default function Profile() {
     });
   };
 
+<<<<<<< Updated upstream
+=======
+  const handleLogout = () => {
+    const confirmLogout = window.confirm('Tem certeza que deseja sair da sua conta?');
+    if (confirmLogout) {
+      logout();
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user?.id) {
+      toast({ title: 'Sem ID para excluir', description: 'Não foi possível identificar o usuário.', variant: 'destructive' });
+      return;
+    }
+    const confirmDelete = window.confirm('Tem certeza que deseja excluir sua conta? Esta ação é irreversível.');
+    if (!confirmDelete) return;
+    try {
+      await apiService.deleteUser(user.id);
+      localStorage.removeItem('akasys_user');
+      localStorage.removeItem('access_token');
+      window.location.href = '/login';
+    } catch (e: any) {
+      toast({ title: 'Erro ao excluir', description: e.message || 'Falha ao excluir conta.', variant: 'destructive' });
+    }
+  };
+
+>>>>>>> Stashed changes
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -194,7 +225,19 @@ export default function Profile() {
                 </div>
               </div>
               
+<<<<<<< Updated upstream
               <div className="flex justify-end pt-4">
+=======
+              <div className="flex justify-between pt-4 gap-4 flex-wrap">
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={handleLogout} className="border-destructive text-destructive hover:bg-destructive/10">
+                    <LogOut className="mr-2 h-4 w-4" /> Sair da Conta
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleDeleteAccount} disabled={!user?.id} className="border-destructive text-destructive hover:bg-destructive/10">
+                    <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
+                  </Button>
+                </div>
+>>>>>>> Stashed changes
                 <Button variant="golden" onClick={handleProfileSave}>
                   <Save className="mr-2 h-4 w-4" />
                   Salvar Alterações

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Paperclip, MoreVertical } from "lucide-react";
+import { Send, Bot, User, Paperclip, MoreVertical, Search, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
 
 interface Message {
   id: string;
@@ -13,6 +14,73 @@ interface Message {
   timestamp: Date;
   type?: 'text' | 'insight' | 'chart';
 }
+
+interface Conversation {
+  id: number;
+  name: string;
+  lastMessage: string;
+  time: string;
+  unread: number;
+  avatar: string;
+  online: boolean;
+}
+
+const conversations: Conversation[] = [
+  {
+    id: 1,
+    name: 'João Silva',
+    lastMessage: 'Obrigado pela ajuda!',
+    time: '2 min',
+    unread: 2,
+    avatar: 'person.circle.fill',
+    online: true,
+  },
+  {
+    id: 2,
+    name: 'Maria Santos',
+    lastMessage: 'Preciso de mais informações sobre o projeto',
+    time: '15 min',
+    unread: 0,
+    avatar: 'person.circle.fill',
+    online: false,
+  },
+  {
+    id: 3,
+    name: 'Carlos Oliveira',
+    lastMessage: 'Vou enviar os documentos amanhã',
+    time: '1h',
+    unread: 1,
+    avatar: 'person.circle.fill',
+    online: true,
+  },
+  {
+    id: 4,
+    name: 'Ana Costa',
+    lastMessage: 'Perfeito, obrigada!',
+    time: '2h',
+    unread: 0,
+    avatar: 'person.circle.fill',
+    online: false,
+  },
+  {
+    id: 5,
+    name: 'Pedro Lima',
+    lastMessage: 'Podemos marcar uma reunião?',
+    time: '3h',
+    unread: 0,
+    avatar: 'person.circle.fill',
+    online: false,
+  },
+  {
+    id: 6,
+    name: 'Equipe Dev',
+    lastMessage: 'Nova atualização disponível',
+    time: '1d',
+    unread: 5,
+    avatar: 'person.3.fill',
+    online: false,
+  },
+];
 
 const initialMessages: Message[] = [
   {
@@ -41,7 +109,11 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [showConversations, setShowConversations] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -50,6 +122,20 @@ export default function Chat() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const filteredConversations = conversations.filter(conv =>
+    conv.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleConversationSelect = (conversation: Conversation) => {
+    setSelectedConversation(conversation);
+    setShowConversations(false);
+  };
+
+  const handleBackToConversations = () => {
+    setShowConversations(true);
+    setSelectedConversation(null);
+  };
 
   const handleSendMessage = async () => {
     if (!newMessage.trim()) return;
@@ -87,6 +173,95 @@ export default function Chat() {
     }
   };
 
+  // Render conversations list
+  if (showConversations) {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-golden to-blue-dark bg-clip-text text-transparent">
+              Conversas
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Suas conversas e mensagens
+            </p>
+          </div>
+          <Button className="bg-golden hover:bg-golden-hover">
+            <Plus className="mr-2 h-4 w-4" />
+            Nova Conversa
+          </Button>
+        </div>
+
+        {/* Search Bar */}
+        <Card className="card-elevation">
+          <CardContent className="p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input
+                placeholder="Buscar conversas..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+              {searchQuery.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
+                  onClick={() => setSearchQuery('')}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Conversations List */}
+        <Card className="card-elevation">
+          <CardContent className="p-0">
+            <div className="space-y-0">
+              {filteredConversations.map((conversation) => (
+                <div
+                  key={conversation.id}
+                  className="flex items-center gap-3 p-4 hover:bg-accent/50 cursor-pointer border-b border-border/50 last:border-b-0"
+                  onClick={() => handleConversationSelect(conversation)}
+                >
+                  <div className="relative">
+                    <Avatar className="h-10 w-10">
+                      <AvatarFallback className="bg-gradient-to-br from-golden/20 to-blue-dark/20">
+                        {conversation.name.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    {conversation.online && (
+                      <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background"></div>
+                    )}
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-medium truncate">{conversation.name}</h3>
+                      <span className="text-xs text-muted-foreground">{conversation.time}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground truncate">{conversation.lastMessage}</p>
+                      {conversation.unread > 0 && (
+                        <Badge className="bg-golden text-golden-foreground text-xs">
+                          {conversation.unread > 9 ? '9+' : conversation.unread}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col">
       {/* Header */}
@@ -94,13 +269,23 @@ export default function Chat() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBackToConversations}
+                className="mr-2"
+              >
+                ←
+              </Button>
               <Avatar className="h-10 w-10">
                 <AvatarFallback className="bg-gradient-to-br from-golden to-golden-hover text-primary-foreground">
                   <Bot className="h-5 w-5" />
                 </AvatarFallback>
               </Avatar>
               <div>
-                <CardTitle className="text-lg">Assistente IA de Negócios</CardTitle>
+                <CardTitle className="text-lg">
+                  {selectedConversation?.name || 'Assistente IA de Negócios'}
+                </CardTitle>
                 <div className="flex items-center gap-2">
                   <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">
                     Online
