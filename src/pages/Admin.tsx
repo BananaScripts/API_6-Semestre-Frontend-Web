@@ -1,404 +1,333 @@
-import { useState } from "react";
+import { useState } from 'react';
+import { NavBar } from '@/components/NavBar';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { 
-  Users, 
-  UserPlus, 
-  Shield, 
   Search, 
-  MoreVertical, 
-  Eye, 
-  Ban, 
-  Trash2,
-  Settings,
-  BarChart3,
-  Activity,
-  AlertTriangle
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+  UserPlus, 
+  Edit, 
+  Trash2, 
+  Filter 
+} from 'lucide-react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth } from "@/hooks/use-auth";
-import { useToast } from "@/hooks/use-toast";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
 
-interface AdminUser {
+interface User {
   id: string;
   name: string;
   email: string;
   role: 'admin' | 'user';
-  status: 'active' | 'suspended' | 'pending';
-  lastAccess: Date;
-  createdAt: Date;
+  status: 'active' | 'inactive' | 'suspended';
+  createdAt: string;
 }
 
-const mockUsers: AdminUser[] = [
-  {
-    id: '1',
-    name: 'Admin Silva',
-    email: "admin@akasys.com",
-    role: 'admin',
-    status: 'active',
-    lastAccess: new Date(Date.now() - 1000 * 60 * 30), // 30 min ago
-    createdAt: new Date('2024-01-15')
-  },
-  {
-    id: '2',
-    name: 'João Santos',
-    email: 'joao@empresa.com',
-    role: 'user',
-    status: 'active',
-    lastAccess: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-    createdAt: new Date('2024-02-20')
-  },
-  {
-    id: '3',
-    name: 'Maria Oliveira',
-    email: 'maria@empresa.com',
-    role: 'user',
-    status: 'suspended',
-    lastAccess: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
-    createdAt: new Date('2024-01-30')
-  },
-  {
-    id: '4',
-    name: 'Carlos Ferreira',
-    email: 'carlos@empresa.com',
-    role: 'user',
-    status: 'pending',
-    lastAccess: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-    createdAt: new Date('2024-03-10')
-  }
-];
-
-const adminStats = [
-  {
-    title: "Total de Usuários",
-    value: "247",
-    change: "+12 este mês",
-    icon: Users,
-    color: "text-blue-600"
-  },
-  {
-    title: "Usuários Ativos",
-    value: "198",
-    change: "80% de taxa de atividade",
-    icon: Activity,
-    color: "text-green-600"
-  },
-  {
-    title: "Alertas Pendentes",
-    value: "3",
-    change: "Requer atenção",
-    icon: AlertTriangle,
-    color: "text-yellow-600"
-  },
-  {
-    title: "Sistema",
-    value: "Operacional",
-    change: "99.9% uptime",
-    icon: BarChart3,
-    color: "text-golden"
-  }
-];
-
 export default function Admin() {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [users, setUsers] = useState<AdminUser[]>(mockUsers);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
 
-  const filteredUsers = users.filter(user =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const [users, setUsers] = useState<User[]>([
+    {
+      id: '1',
+      name: 'João Silva',
+      email: 'joao@example.com',
+      role: 'admin',
+      status: 'active',
+      createdAt: '2024-01-15'
+    },
+    {
+      id: '2',
+      name: 'Maria Santos',
+      email: 'maria@example.com',
+      role: 'user',
+      status: 'active',
+      createdAt: '2024-02-20'
+    },
+    {
+      id: '3',
+      name: 'Pedro Oliveira',
+      email: 'pedro@example.com',
+      role: 'user',
+      status: 'inactive',
+      createdAt: '2024-03-10'
+    },
+    {
+      id: '4',
+      name: 'Ana Costa',
+      email: 'ana@example.com',
+      role: 'user',
+      status: 'suspended',
+      createdAt: '2024-01-05'
+    },
+  ]);
 
-  const handleUserAction = (userId: string, action: string) => {
-    const user = users.find(u => u.id === userId);
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         user.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = filterStatus === 'all' || user.status === filterStatus;
+    return matchesSearch && matchesFilter;
+  });
+
+  const handleCreateUser = () => {
+    setEditingUser(null);
+    setIsDialogOpen(true);
+  };
+
+  const handleEditUser = (user: User) => {
+    setEditingUser(user);
+    setIsDialogOpen(true);
+  };
+
+  const handleDeleteUser = (userId: string) => {
+    if (confirm('Tem certeza que deseja excluir este usuário?')) {
+      setUsers(users.filter(u => u.id !== userId));
+      toast.success('Usuário excluído com sucesso');
+    }
+  };
+
+  const handleSaveUser = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
     
-    switch (action) {
-      case 'view':
-        toast({
-          title: "Visualizar usuário",
-          description: `Abrindo perfil de ${user?.name}`,
-        });
-        break;
-      case 'suspend':
-        setUsers(users.map(u => 
-          u.id === userId 
-            ? { ...u, status: u.status === 'suspended' ? 'active' : 'suspended' as const }
-            : u
-        ));
-        toast({
-          title: user?.status === 'suspended' ? "Usuário reativado" : "Usuário suspenso",
-          description: `${user?.name} foi ${user?.status === 'suspended' ? 'reativado' : 'suspenso'} com sucesso.`,
-        });
-        break;
-      case 'delete':
-        setUsers(users.filter(u => u.id !== userId));
-        toast({
-          title: "Usuário removido",
-          description: `${user?.name} foi removido do sistema.`,
-          variant: "destructive",
-        });
-        break;
+    const userData: User = {
+      id: editingUser?.id || Date.now().toString(),
+      name: formData.get('name') as string,
+      email: formData.get('email') as string,
+      role: formData.get('role') as 'admin' | 'user',
+      status: formData.get('status') as 'active' | 'inactive' | 'suspended',
+      createdAt: editingUser?.createdAt || new Date().toISOString().split('T')[0],
+    };
+
+    if (editingUser) {
+      setUsers(users.map(u => u.id === editingUser.id ? userData : u));
+      toast.success('Usuário atualizado com sucesso');
+    } else {
+      setUsers([...users, userData]);
+      toast.success('Usuário criado com sucesso');
     }
+
+    setIsDialogOpen(false);
   };
 
-  const getStatusBadge = (status: AdminUser['status']) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active':
-        return <Badge className="bg-green-100 text-green-700 border-green-200">Ativo</Badge>;
-      case 'suspended':
-        return <Badge className="bg-red-100 text-red-700 border-red-200">Suspenso</Badge>;
-      case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">Pendente</Badge>;
+      case 'active': return 'bg-success/20 text-success';
+      case 'inactive': return 'bg-muted/20 text-muted-foreground';
+      case 'suspended': return 'bg-destructive/20 text-destructive';
+      default: return 'bg-muted/20 text-muted-foreground';
     }
   };
 
-  const getRoleBadge = (role: AdminUser['role']) => {
-    return role === 'admin' ? (
-      <Badge className="bg-golden/20 text-golden border-golden/20">Admin</Badge>
-    ) : (
-      <Badge variant="outline">Usuário</Badge>
-    );
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'active': return 'Ativo';
+      case 'inactive': return 'Inativo';
+      case 'suspended': return 'Suspenso';
+      default: return status;
+    }
   };
-
-  if (user?.role !== 'admin') {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Acesso Restrito</h2>
-          <p className="text-muted-foreground">Você não tem permissão para acessar esta área.</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-golden to-blue-dark bg-clip-text text-transparent">
-            Painel Administrativo
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Gerencie usuários, permissões e configurações do sistema
-          </p>
+    <div className="min-h-screen">
+      <NavBar />
+      
+      <main className="container mx-auto p-6">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold mb-2">Administração</h1>
+          <p className="text-muted-foreground">Gerenciar usuários e permissões</p>
         </div>
-        <Button variant="golden">
-          <UserPlus className="mr-2 h-4 w-4" />
-          Novo Usuário
-        </Button>
-      </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {adminStats.map((stat, index) => (
-          <Card key={index} className="card-elevation hover:shadow-lg smooth-transition">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground mt-1">{stat.change}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Tabs */}
-      <Tabs defaultValue="users" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="users">Usuários</TabsTrigger>
-          <TabsTrigger value="permissions">Permissões</TabsTrigger>
-          <TabsTrigger value="settings">Configurações</TabsTrigger>
-          <TabsTrigger value="logs">Logs do Sistema</TabsTrigger>
-        </TabsList>
-
-        {/* Users Tab */}
-        <TabsContent value="users" className="space-y-6">
-          <Card className="card-elevation">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Gerenciamento de Usuários</CardTitle>
-                  <CardDescription>
-                    Visualize e gerencie todos os usuários da plataforma
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar usuários..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-8 w-64"
-                    />
-                  </div>
-                </div>
+        <Card className="gradient-card border-border">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row justify-between gap-4">
+              <div>
+                <CardTitle>Usuários</CardTitle>
+                <CardDescription>
+                  {filteredUsers.length} usuários encontrados
+                </CardDescription>
               </div>
-            </CardHeader>
-            <CardContent>
+              
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={handleCreateUser}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Novo Usuário
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-card">
+                  <form onSubmit={handleSaveUser}>
+                    <DialogHeader>
+                      <DialogTitle>
+                        {editingUser ? 'Editar Usuário' : 'Novo Usuário'}
+                      </DialogTitle>
+                      <DialogDescription>
+                        Preencha os dados do usuário
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="grid gap-4 py-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="name">Nome</Label>
+                        <Input
+                          id="name"
+                          name="name"
+                          defaultValue={editingUser?.name}
+                          className="bg-surface"
+                          required
+                        />
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          name="email"
+                          type="email"
+                          defaultValue={editingUser?.email}
+                          className="bg-surface"
+                          required
+                        />
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="role">Função</Label>
+                        <Select name="role" defaultValue={editingUser?.role || 'user'}>
+                          <SelectTrigger className="bg-surface">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="user">Usuário</SelectItem>
+                            <SelectItem value="admin">Administrador</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="status">Status</Label>
+                        <Select name="status" defaultValue={editingUser?.status || 'active'}>
+                          <SelectTrigger className="bg-surface">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="active">Ativo</SelectItem>
+                            <SelectItem value="inactive">Inativo</SelectItem>
+                            <SelectItem value="suspended">Suspenso</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    
+                    <DialogFooter>
+                      <Button type="submit">
+                        {editingUser ? 'Salvar' : 'Criar'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 mt-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar usuários..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 bg-surface"
+                />
+              </div>
+              
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-full sm:w-[200px] bg-surface">
+                  <Filter className="mr-2 h-4 w-4" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="active">Ativos</SelectItem>
+                  <SelectItem value="inactive">Inativos</SelectItem>
+                  <SelectItem value="suspended">Suspensos</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          
+          <CardContent>
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Usuário</TableHead>
-                    <TableHead>Tipo</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Função</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Último Acesso</TableHead>
-                    <TableHead>Cadastrado em</TableHead>
+                    <TableHead>Data de Criação</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredUsers.map((user) => (
                     <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.name}</TableCell>
+                      <TableCell>{user.email}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-gradient-to-br from-golden/20 to-blue-dark/20">
-                              {user.name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{user.name}</p>
-                            <p className="text-sm text-muted-foreground">{user.email}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>{getRoleBadge(user.role)}</TableCell>
-                      <TableCell>{getStatusBadge(user.status)}</TableCell>
-                      <TableCell>
-                        <span className="text-sm text-muted-foreground">
-                          {user.lastAccess.toLocaleDateString('pt-BR')}
-                        </span>
+                        <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                          {user.role === 'admin' ? 'Admin' : 'Usuário'}
+                        </Badge>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm text-muted-foreground">
-                          {user.createdAt.toLocaleDateString('pt-BR')}
-                        </span>
+                        <Badge className={getStatusColor(user.status)}>
+                          {getStatusLabel(user.status)}
+                        </Badge>
                       </TableCell>
+                      <TableCell>{new Date(user.createdAt).toLocaleDateString('pt-BR')}</TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleUserAction(user.id, 'view')}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              Visualizar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleUserAction(user.id, 'suspend')}>
-                              <Ban className="mr-2 h-4 w-4" />
-                              {user.status === 'suspended' ? 'Reativar' : 'Suspender'}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              onClick={() => handleUserAction(user.id, 'delete')}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Remover
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditUser(user)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteUser(user.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Permissions Tab */}
-        <TabsContent value="permissions">
-          <Card className="card-elevation">
-            <CardHeader>
-              <CardTitle>Gerenciamento de Permissões</CardTitle>
-              <CardDescription>
-                Configure permissões e acessos por tipo de usuário
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+            </div>
+            
+            {filteredUsers.length === 0 && (
               <div className="text-center py-12">
-                <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Sistema de Permissões</h3>
-                <p className="text-muted-foreground">
-                  Configure permissões detalhadas conectando ao Supabase
-                </p>
+                <p className="text-muted-foreground">Nenhum usuário encontrado</p>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Settings Tab */}
-        <TabsContent value="settings">
-          <Card className="card-elevation">
-            <CardHeader>
-              <CardTitle>Configurações do Sistema</CardTitle>
-              <CardDescription>
-                Gerencie configurações globais da plataforma
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12">
-                <Settings className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Configurações Avançadas</h3>
-                <p className="text-muted-foreground">
-                  Configurações de sistema e integrações disponíveis com backend
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Logs Tab */}
-        <TabsContent value="logs">
-          <Card className="card-elevation">
-            <CardHeader>
-              <CardTitle>Logs do Sistema</CardTitle>
-              <CardDescription>
-                Monitore atividades e eventos do sistema
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12">
-                <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Logs de Auditoria</h3>
-                <p className="text-muted-foreground">
-                  Logs detalhados e rastreamento de ações disponíveis com Supabase
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            )}
+          </CardContent>
+        </Card>
+      </main>
     </div>
   );
 }

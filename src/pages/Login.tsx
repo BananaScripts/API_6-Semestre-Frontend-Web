@@ -1,149 +1,139 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Eye, EyeOff, TrendingUp, Mail, Lock } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/hooks/use-auth";
-import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAuth } from '@/context/AuthContext';
+import { toast } from 'sonner';
+import { Lock, Mail } from 'lucide-react';
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const { login, isLoading } = useAuth();
-  const { toast } = useToast();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [name, setName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const { login, user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const success = await login(email, password);
-    
-    if (!success) {
-      toast({
-        title: "Erro no login",
-        description: "Email ou senha incorretos. Tente novamente.",
-        variant: "destructive",
-      });
+    if (!email || !password || (isSignUp && !name)) {
+      toast.error('Por favor, preencha todos os campos');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      if (isSignUp) {
+        toast.info('Funcionalidade de cadastro será implementada em breve');
+      } else {
+        await login(email, password);
+        toast.success('Login realizado com sucesso!');
+      }
+    } catch (error) {
+      toast.error('Erro ao fazer login. Verifique suas credenciais.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bi-gradient">
-      <div className="w-full max-w-md space-y-6">
-        {/* Logo and Branding */}
-        <div className="text-center space-y-2">
-          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-golden to-golden-hover rounded-2xl flex items-center justify-center golden-glow">
-            <TrendingUp className="w-8 h-8 text-primary-foreground" />
-          </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-golden to-blue-dark bg-clip-text text-transparent">
-            Akasys
-          </h1>
-          <p className="text-muted-foreground">
-            Plataforma de Business Intelligence
-          </p>
-        </div>
-
-        {/* Login Form */}
-        <Card className="card-elevation bg-card/80 backdrop-blur-sm border-border/50">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-semibold">Bem-vindo de volta</CardTitle>
-            <CardDescription>
-              Entre com suas credenciais para acessar a plataforma
-            </CardDescription>
-          </CardHeader>
-          
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="flex min-h-screen items-center justify-center p-4">
+      <Card className="w-full max-w-md gradient-card shadow-glow">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold text-center">
+            {isSignUp ? 'Criar Conta' : 'BI Insights'}
+          </CardTitle>
+          <CardDescription className="text-center">
+            {isSignUp 
+              ? 'Crie sua conta para começar' 
+              : 'Entre com suas credenciais para continuar'
+            }
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {isSignUp && (
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="seu@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="pl-10 focus:border-golden smooth-transition"
-                  />
-                </div>
+                <Label htmlFor="name">Nome</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Seu nome completo"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="bg-surface"
+                  required={isSignUp}
+                />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="pl-10 pr-10 focus:border-golden smooth-transition"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-sm">
-                <Link 
-                  to="/forgot-password" 
-                  className="text-golden hover:text-golden-hover smooth-transition"
-                >
-                  Esqueceu a senha?
-                </Link>
-              </div>
-
-              <Button 
-                type="submit" 
-                variant="golden" 
-                className="w-full"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                    Entrando...
-                  </div>
-                ) : (
-                  "Entrar"
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Demo Credentials */}
-        <Card className="bg-muted/50 border-border/50">
-          <CardContent className="pt-6">
-            <h3 className="font-semibold mb-3 text-center">Credenciais de Demonstração</h3>
-            <div className="space-y-2 text-sm">
-              <div className="bg-background/50 p-3 rounded border">
-                <p className="font-medium text-golden">Administrador:</p>
-                <p>Email: admin@akasys.com</p>
-                <p>Senha: admin123</p>
-              </div>
-              <div className="bg-background/50 p-3 rounded border">
-                <p className="font-medium text-blue-dark">Usuário:</p>
-                <p>Email: joao@empresa.com</p>
-                <p>Senha: user123</p>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="seu@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="bg-surface pl-10"
+                  required
+                />
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="bg-surface pl-10"
+                  required
+                />
+              </div>
+            </div>
+
+            <Button 
+              type="submit" 
+              className="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Carregando...' : (isSignUp ? 'Criar Conta' : 'Entrar')}
+            </Button>
+
+            <div className="text-center text-sm">
+              <button
+                type="button"
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {isSignUp 
+                  ? 'Já tem uma conta? Entrar' 
+                  : 'Não tem uma conta? Cadastre-se'
+                }
+              </button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
