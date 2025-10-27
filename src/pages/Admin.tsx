@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Users, 
   UserPlus, 
@@ -36,84 +36,54 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { apiService } from "@/services/api";
+import { Usuario, CreateUsuario, UpdateUsuario } from "@/types/api";
 
-interface AdminUser {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'user';
-  status: 'active' | 'suspended' | 'pending';
-  lastAccess: Date;
-  createdAt: Date;
+interface AdminUser extends Usuario {
+  // Extend with additional fields for admin view
+  status?: 'active' | 'suspended' | 'pending';
+  role?: 'admin' | 'user';
+  lastAccess?: Date;
+  createdAt?: Date;
 }
-
-const mockUsers: AdminUser[] = [
-  {
-    id: '1',
-    name: 'Admin Silva',
-    email: "admin@akasys.com",
-    role: 'admin',
-    status: 'active',
-    lastAccess: new Date(Date.now() - 1000 * 60 * 30), // 30 min ago
-    createdAt: new Date('2024-01-15')
-  },
-  {
-    id: '2',
-    name: 'João Santos',
-    email: 'joao@empresa.com',
-    role: 'user',
-    status: 'active',
-    lastAccess: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-    createdAt: new Date('2024-02-20')
-  },
-  {
-    id: '3',
-    name: 'Maria Oliveira',
-    email: 'maria@empresa.com',
-    role: 'user',
-    status: 'suspended',
-    lastAccess: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
-    createdAt: new Date('2024-01-30')
-  },
-  {
-    id: '4',
-    name: 'Carlos Ferreira',
-    email: 'carlos@empresa.com',
-    role: 'user',
-    status: 'pending',
-    lastAccess: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-    createdAt: new Date('2024-03-10')
-  }
-];
 
 const adminStats = [
   {
     title: "Total de Usuários",
-    value: "247",
-    change: "+12 este mês",
+    value: "0",
+    change: "Carregando...",
     icon: Users,
     color: "text-blue-600"
   },
   {
     title: "Usuários Ativos",
-    value: "198",
-    change: "80% de taxa de atividade",
+    value: "0",
+    change: "Carregando...",
     icon: Activity,
     color: "text-green-600"
   },
   {
     title: "Alertas Pendentes",
-    value: "3",
-    change: "Requer atenção",
+    value: "0",
+    change: "Nenhum alerta",
     icon: AlertTriangle,
     color: "text-yellow-600"
   },
   {
     title: "Sistema",
-    value: "Operacional",
-    change: "99.9% uptime",
+    value: "Conectado",
+    change: "API funcionando",
     icon: BarChart3,
     color: "text-golden"
   }
@@ -123,21 +93,131 @@ export default function Admin() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
-  const [users, setUsers] = useState<AdminUser[]>(mockUsers);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState(adminStats);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newUser, setNewUser] = useState<CreateUsuario>({
+    nome: '',
+    email: '',
+    senha: ''
+  });
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      setIsLoading(true);
+      // For now, we'll simulate getting all users by trying different IDs
+      // In a real scenario, you'd have an endpoint to get all users
+      const userList: AdminUser[] = [];
+      
+      // Try to get current user info
+      if (user?.id) {
+        try {
+          const currentUser = await apiService.getUser(user.id);
+          userList.push({
+            ...currentUser,
+            status: 'active',
+            role: 'admin', // Assume current user is admin
+            lastAccess: new Date(),
+            createdAt: new Date()
+          });
+        } catch (error) {
+          console.error('Error fetching current user:', error);
+        }
+      }
+
+      setUsers(userList);
+      updateStats(userList);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toast({
+        title: "Erro ao carregar usuários",
+        description: "Não foi possível carregar a lista de usuários.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateUser = async () => {
+    if (!newUser.nome || !newUser.email || !newUser.senha) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Preencha todos os campos para criar o usuário.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setIsCreatingUser(true);
+      const createdUser = await apiService.createUser(newUser);
+      
+      // Add to local state
+      const adminUser: AdminUser = {
+        ...createdUser,
+        status: 'active',
+        role: 'user',
+        lastAccess: new Date(),
+        createdAt: new Date()
+      };
+      
+      setUsers([...users, adminUser]);
+      updateStats([...users, adminUser]);
+      
+      // Reset form
+      setNewUser({ nome: '', email: '', senha: '' });
+      setIsCreateDialogOpen(false);
+      
+      toast({
+        title: "Usuário criado",
+        description: `${createdUser.nome} foi criado com sucesso.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Erro ao criar usuário",
+        description: "Não foi possível criar o usuário. Verifique os dados.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
+  const updateStats = (userList: AdminUser[]) => {
+    const totalUsers = userList.length;
+    const activeUsers = userList.filter(u => u.status === 'active').length;
+    
+    setStats(prevStats => prevStats.map(stat => {
+      if (stat.title === "Total de Usuários") {
+        return { ...stat, value: totalUsers.toString(), change: "atualizado" };
+      }
+      if (stat.title === "Usuários Ativos") {
+        return { ...stat, value: activeUsers.toString(), change: `${activeUsers} ativos` };
+      }
+      return stat;
+    }));
+  };
 
   const filteredUsers = users.filter(user =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleUserAction = (userId: string, action: string) => {
-    const user = users.find(u => u.id === userId);
+  const handleUserAction = async (userId: number, action: string) => {
+    const foundUser = users.find(u => u.id === userId);
     
     switch (action) {
       case 'view':
         toast({
           title: "Visualizar usuário",
-          description: `Abrindo perfil de ${user?.name}`,
+          description: `Abrindo perfil de ${foundUser?.nome}`,
         });
         break;
       case 'edit':
@@ -150,21 +230,19 @@ export default function Admin() {
         setIsCreateDialogOpen(true);
         break;
       case 'suspend':
-        setUsers(users.map(u => 
-          u.id === userId 
-            ? { ...u, status: u.status === 'suspended' ? 'active' : 'suspended' as const }
-            : u
-        ));
+        // Note: Backend doesn't have suspend functionality, this would need backend changes
         toast({
-          title: user?.status === 'suspended' ? "Usuário reativado" : "Usuário suspenso",
-          description: `${user?.name} foi ${user?.status === 'suspended' ? 'reativado' : 'suspenso'} com sucesso.`,
+          title: "Funcionalidade não implementada",
+          description: "Suspensão de usuários não está disponível na API atual.",
         });
         break;
       case 'delete':
 
+
         const confirmDelete = window.confirm(`Tem certeza que deseja excluir o usuário ${foundUser?.nome}?`);
         if (!confirmDelete) return;
         
+
         try {
           await apiService.deleteUser(userId);
           setUsers(users.filter(u => u.id !== userId));
@@ -229,12 +307,12 @@ export default function Admin() {
             Gerencie usuários, permissões e configurações do sistema
           </p>
         </div>
-<<<<<<< Updated upstream
+
         <Button variant="golden">
           <UserPlus className="mr-2 h-4 w-4" />
           Novo Usuário
         </Button>
-=======
+
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="golden">
@@ -244,11 +322,16 @@ export default function Admin() {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
+
               <DialogTitle>
                 {newUser.nome && newUser.email ? 'Editar Usuário' : 'Criar Novo Usuário'}
               </DialogTitle>
               <DialogDescription>
                 {newUser.nome && newUser.email ? 'Edite as informações do usuário.' : 'Adicione um novo usuário ao sistema.'}
+              <DialogTitle>Criar Novo Usuário</DialogTitle>
+              <DialogDescription>
+                Adicione um novo usuário ao sistema.
+
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -292,18 +375,22 @@ export default function Admin() {
                   onClick={handleCreateUser}
                   disabled={isCreatingUser}
                 >
+
                   {isCreatingUser ? "Salvando..." : (newUser.nome && newUser.email ? "Salvar Alterações" : "Criar Usuário")}
+
+                  {isCreatingUser ? "Criando..." : "Criar Usuário"}
+
                 </Button>
               </div>
             </div>
           </DialogContent>
         </Dialog>
->>>>>>> Stashed changes
+
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {adminStats.map((stat, index) => (
+        {stats.map((stat, index) => (
           <Card key={index} className="card-elevation hover:shadow-lg smooth-transition">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
@@ -369,11 +456,11 @@ export default function Admin() {
                         <div className="flex items-center gap-3">
                           <Avatar className="h-8 w-8">
                             <AvatarFallback className="bg-gradient-to-br from-golden/20 to-blue-dark/20">
-                              {user.name.charAt(0).toUpperCase()}
+                              {user.nome.charAt(0).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-medium">{user.name}</p>
+                            <p className="font-medium">{user.nome}</p>
                             <p className="text-sm text-muted-foreground">{user.email}</p>
                           </div>
                         </div>

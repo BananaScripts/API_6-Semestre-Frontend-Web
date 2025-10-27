@@ -1,9 +1,6 @@
 import { useState } from "react";
-<<<<<<< Updated upstream
-import { User, Mail, Lock, Bell, Shield, Info, Save, Eye, EyeOff } from "lucide-react";
-=======
 import { User, Mail, Lock, Bell, Shield, Info, Save, Eye, EyeOff, Trash2, LogOut } from "lucide-react";
->>>>>>> Stashed changes
+import { User, Mail, Lock, Bell, Shield, Info, Save, Eye, EyeOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Profile() {
@@ -23,7 +21,7 @@ export default function Profile() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [profileData, setProfileData] = useState({
-    name: user?.name || '',
+  name: (user as any)?.nome || '',
     email: user?.email || '',
     phone: '',
     company: '',
@@ -43,11 +41,41 @@ export default function Profile() {
     marketingEmails: false
   });
 
-  const handleProfileSave = () => {
-    toast({
-      title: "Perfil atualizado",
-      description: "Suas informações foram salvas com sucesso.",
-    });
+  const handleProfileSave = async () => {
+    if (!user?.id) {
+      toast({
+        title: "Sem ID do usuário",
+        description: "Não foi possível identificar o usuário para atualizar.",
+        variant: "destructive"
+      });
+      return;
+    }
+    try {
+      const payload: any = {};
+      if (profileData.name && profileData.name !== user.nome) payload.nome = profileData.name;
+      if (profileData.email && profileData.email !== user.email) payload.email = profileData.email;
+      if (Object.keys(payload).length === 0) {
+        toast({ title: "Nada para atualizar", description: "Nenhuma alteração detectada." });
+        return;
+      }
+      const updated = await apiService.updateUser(user.id, payload);
+      // Atualiza storage local (akasys_user) mantendo possíveis campos extras
+      const stored = localStorage.getItem('akasys_user');
+      let storedObj: any = stored ? JSON.parse(stored) : {};
+      storedObj = { ...storedObj, nome: updated.nome, email: updated.email };
+      localStorage.setItem('akasys_user', JSON.stringify(storedObj));
+      // Força reload leve da página ou poderia expor método no contexto para setUser
+      toast({
+        title: "Perfil atualizado",
+        description: "Suas informações foram salvas com sucesso.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Erro ao atualizar",
+        description: e.message || 'Falha ao salvar alterações.',
+        variant: 'destructive'
+      });
+    }
   };
 
   const handlePasswordChange = () => {
@@ -79,8 +107,7 @@ export default function Profile() {
     });
   };
 
-<<<<<<< Updated upstream
-=======
+
   const handleLogout = () => {
     const confirmLogout = window.confirm('Tem certeza que deseja sair da sua conta?');
     if (confirmLogout) {
@@ -105,7 +132,7 @@ export default function Profile() {
     }
   };
 
->>>>>>> Stashed changes
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -113,7 +140,7 @@ export default function Profile() {
         <Avatar className="h-20 w-20">
           <AvatarImage src={user?.avatar} />
           <AvatarFallback className="bg-gradient-to-br from-golden to-golden-hover text-primary-foreground text-2xl font-bold">
-            {user?.name?.charAt(0).toUpperCase() || 'U'}
+            {(user as any)?.nome?.charAt(0).toUpperCase() || 'U'}
           </AvatarFallback>
         </Avatar>
         
@@ -225,9 +252,7 @@ export default function Profile() {
                 </div>
               </div>
               
-<<<<<<< Updated upstream
-              <div className="flex justify-end pt-4">
-=======
+
               <div className="flex justify-between pt-4 gap-4 flex-wrap">
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" onClick={handleLogout} className="border-destructive text-destructive hover:bg-destructive/10">
@@ -237,7 +262,12 @@ export default function Profile() {
                     <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
                   </Button>
                 </div>
->>>>>>> Stashed changes
+
+              <div className="flex justify-between pt-4 gap-4 flex-wrap">
+                <Button type="button" variant="outline" onClick={handleDeleteAccount} disabled={!user?.id} className="border-destructive text-destructive hover:bg-destructive/10">
+                  <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
+                </Button>
+
                 <Button variant="golden" onClick={handleProfileSave}>
                   <Save className="mr-2 h-4 w-4" />
                   Salvar Alterações

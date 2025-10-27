@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import "../static/login.css";
+import api from "../services/api";
+import akasysLogo from "../assets/akasysver.png";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -9,56 +11,60 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     try {
-      const response = await fetch("http://localhost:8000/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          username: email,
-          password: senha,
-        }),
-      });
-
-      if (!response.ok) throw new Error("Email ou senha inválidos");
-
-      const data = await response.json();
-      localStorage.setItem("token", data.access_token);
-
-      console.log("Redirecionando...");
-      navigate("/home");
+      const data = await api.login({ email, senha });
+      if (data && data.access_token) {
+        navigate('/home');
+      } else {
+        alert('Falha no login');
+      }
     } catch (err) {
-      alert(err.message);
+      alert(err.message || 'Falha no login');
     }
   };
 
   return (
     <div id="login-container">
-      <div className="login-panel">
+      <div className="decor-left" />
+      <div className="decor-right" />
+      <div className="login-panel card">
         <form id="login-form" onSubmit={handleSubmit}>
-          <h1>Bem-vindo à Dom Rock</h1>
+          <img src={akasysLogo} alt="Logo Akasys" />
+          <h1 className="text-title">Bem-vindo à Akasys</h1>
 
           <label htmlFor="email">Email</label>
-          <input
-            type="email"
-            id="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+          <div className="input-container">
+            <input
+              type="email"
+              id="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
 
           <label htmlFor="senha">Senha</label>
-          <input
-            type="password"
-            id="senha"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            required
-          />
+          <div className="input-container">
+            <input
+              type="password"
+              id="senha"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              required
+            />
+          </div>
 
-          <button type="submit">Entrar</button>
+          <div style={{ display: "flex", justifyContent: "center", marginTop: "1rem" }}>
+            <button className="button-primary" type="submit">
+              Entrar
+            </button>
+          </div>
+
+          <div style={{ textAlign: "center", marginTop: "1rem" }}>
+            <Link to="/register" className="text-link">
+              Não tem conta? Cadastre-se
+            </Link>
+          </div>
         </form>
       </div>
     </div>

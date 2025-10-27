@@ -1,11 +1,13 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { apiService } from "@/services/api";
+import { Usuario } from "@/types/api";
 
 interface User {
-  id: string;
-  name: string;
+  id: number;
+  nome: string;
   email: string;
-  role: 'admin' | 'user';
+  role?: 'admin' | 'user'; // Optional since backend doesn't provide role
   avatar?: string;
 }
 
@@ -14,28 +16,12 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  register: (userData: { nome: string; email: string; senha: string }) => Promise<boolean>;
   isLoading: boolean;
+  token: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Mock user data - replace with real authentication
-const mockUsers = [
-  {
-    id: '1',
-    name: 'Admin Silva',
-    email: "admin@akasys.com",
-    role: 'admin' as const,
-    password: 'admin123'
-  },
-  {
-    id: '2',
-    name: 'João Santos',
-    email: "user@akasys.com",
-    role: 'user' as const,
-    password: 'user123'
-  }
-];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -43,10 +29,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if user is already logged in
+    // Check if user is already logged in by checking token
+    const token = apiService.getToken();
     const savedUser = localStorage.getItem("akasys_user");
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+
+    if (token) {
+      // If we have a token but no saved user, try to decode it
+      if (savedUser) {
+        try {
+          const parsedUser = JSON.parse(savedUser);
+          setUser(parsedUser);
+        } catch (error) {
+          apiService.clearToken();
+          localStorage.removeItem("akasys_user");
+        }
+      } else {
+        // Try to decode JWT to populate minimal user info (if token is a JWT)
+        try {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+            const inferredUser: User = {
+              id: payload.sub ? Number(payload.sub) : 0,
+              nome: payload.nome || payload.name || (payload.email ? payload.email.split('@')[0] : 'user'),
+              email: payload.email || payload.preferred_username || '',
+            };
+            setUser(inferredUser);
+            localStorage.setItem('akasys_user', JSON.stringify(inferredUser));
+          }
+        } catch (e) {
+          // ignore decode errors
+        }
+      }
     }
     setIsLoading(false);
   }, []);
@@ -54,26 +68,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const foundUser = mockUsers.find(u => u.email === email && u.password === password);
-    
-    if (foundUser) {
-      const { password: _, ...userWithoutPassword } = foundUser;
-      setUser(userWithoutPassword);
-      localStorage.setItem("akasys_user", JSON.stringify(userWithoutPassword));
+    try {
+      // Call real API login
+      const loginResponse = await apiService.login({ username: email, password });
+
+      // apiService already stored the token. Try to decode token for user info
+      let userData: User | null = null;
+      const token = loginResponse.access_token;
+
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          userData = {
+            id: payload.sub ? Number(payload.sub) : 0,
+            nome: payload.nome || payload.name || email.split('@')[0],
+            email: payload.email || email,
+          };
+        }
+      } catch (e) {
+        // fallback
+      }
+
+      if (!userData) {
+        userData = {
+          id: 0,
+          nome: email.split('@')[0],
+          email,
+        };
+      }
+
+      setUser(userData);
+      localStorage.setItem("akasys_user", JSON.stringify(userData));
       setIsLoading(false);
       navigate('/dashboard');
       return true;
+    } catch (error) {
+      console.error('Login error:', error);
+      setIsLoading(false);
+      return false;
     }
+  };
+
+  const register = async (userData: { nome: string; email: string; senha: string }): Promise<boolean> => {
+    setIsLoading(true);
     
-    setIsLoading(false);
-    return false;
+    try {
+      await apiService.createUser(userData);
+      setIsLoading(false);
+      return true;
+    } catch (error) {
+      console.error('Registration error:', error);
+      setIsLoading(false);
+      return false;
+    }
   };
 
   const logout = () => {
     setUser(null);
+    apiService.clearToken();
     localStorage.removeItem("akasys_user");
     navigate('/login');
   };
@@ -81,10 +134,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{ 
       user, 
-      isAuthenticated: !!user,
       login, 
       logout, 
-      isLoading
+      register, 
+      isLoading, 
+      token: apiService.getToken() 
     }}>
       {children}
     </AuthContext.Provider>
