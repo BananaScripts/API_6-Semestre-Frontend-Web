@@ -6,6 +6,7 @@ import {
   Search, 
   MoreVertical, 
   Eye, 
+  Edit,
   Ban, 
   Trash2,
   Settings,
@@ -219,6 +220,15 @@ export default function Admin() {
           description: `Abrindo perfil de ${foundUser?.nome}`,
         });
         break;
+      case 'edit':
+        // Set form data for editing
+        setNewUser({
+          nome: foundUser?.nome || '',
+          email: foundUser?.email || '',
+          senha: ''
+        });
+        setIsCreateDialogOpen(true);
+        break;
       case 'suspend':
         // Note: Backend doesn't have suspend functionality, this would need backend changes
         toast({
@@ -227,6 +237,12 @@ export default function Admin() {
         });
         break;
       case 'delete':
+
+
+        const confirmDelete = window.confirm(`Tem certeza que deseja excluir o usuário ${foundUser?.nome}?`);
+        if (!confirmDelete) return;
+        
+
         try {
           await apiService.deleteUser(userId);
           setUsers(users.filter(u => u.id !== userId));
@@ -243,6 +259,7 @@ export default function Admin() {
             variant: "destructive",
           });
         }
+
         break;
     }
   };
@@ -290,6 +307,12 @@ export default function Admin() {
             Gerencie usuários, permissões e configurações do sistema
           </p>
         </div>
+
+        <Button variant="golden">
+          <UserPlus className="mr-2 h-4 w-4" />
+          Novo Usuário
+        </Button>
+
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="golden">
@@ -299,9 +322,16 @@ export default function Admin() {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
+
+              <DialogTitle>
+                {newUser.nome && newUser.email ? 'Editar Usuário' : 'Criar Novo Usuário'}
+              </DialogTitle>
+              <DialogDescription>
+                {newUser.nome && newUser.email ? 'Edite as informações do usuário.' : 'Adicione um novo usuário ao sistema.'}
               <DialogTitle>Criar Novo Usuário</DialogTitle>
               <DialogDescription>
                 Adicione um novo usuário ao sistema.
+
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -345,12 +375,17 @@ export default function Admin() {
                   onClick={handleCreateUser}
                   disabled={isCreatingUser}
                 >
+
+                  {isCreatingUser ? "Salvando..." : (newUser.nome && newUser.email ? "Salvar Alterações" : "Criar Usuário")}
+
                   {isCreatingUser ? "Criando..." : "Criar Usuário"}
+
                 </Button>
               </div>
             </div>
           </DialogContent>
         </Dialog>
+
       </div>
 
       {/* Stats Grid */}
@@ -455,6 +490,10 @@ export default function Admin() {
                             <DropdownMenuItem onClick={() => handleUserAction(user.id, 'view')}>
                               <Eye className="mr-2 h-4 w-4" />
                               Visualizar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleUserAction(user.id, 'edit')}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Editar
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleUserAction(user.id, 'suspend')}>
                               <Ban className="mr-2 h-4 w-4" />

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { User, Mail, Lock, Bell, Shield, Info, Save, Eye, EyeOff, Trash2, LogOut } from "lucide-react";
 import { User, Mail, Lock, Bell, Shield, Info, Save, Eye, EyeOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,7 @@ import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { toast } = useToast();
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -106,6 +107,14 @@ export default function Profile() {
     });
   };
 
+
+  const handleLogout = () => {
+    const confirmLogout = window.confirm('Tem certeza que deseja sair da sua conta?');
+    if (confirmLogout) {
+      logout();
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (!user?.id) {
       toast({ title: 'Sem ID para excluir', description: 'Não foi possível identificar o usuário.', variant: 'destructive' });
@@ -122,6 +131,7 @@ export default function Profile() {
       toast({ title: 'Erro ao excluir', description: e.message || 'Falha ao excluir conta.', variant: 'destructive' });
     }
   };
+
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -242,10 +252,22 @@ export default function Profile() {
                 </div>
               </div>
               
+
+              <div className="flex justify-between pt-4 gap-4 flex-wrap">
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={handleLogout} className="border-destructive text-destructive hover:bg-destructive/10">
+                    <LogOut className="mr-2 h-4 w-4" /> Sair da Conta
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleDeleteAccount} disabled={!user?.id} className="border-destructive text-destructive hover:bg-destructive/10">
+                    <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
+                  </Button>
+                </div>
+
               <div className="flex justify-between pt-4 gap-4 flex-wrap">
                 <Button type="button" variant="outline" onClick={handleDeleteAccount} disabled={!user?.id} className="border-destructive text-destructive hover:bg-destructive/10">
                   <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
                 </Button>
+
                 <Button variant="golden" onClick={handleProfileSave}>
                   <Save className="mr-2 h-4 w-4" />
                   Salvar Alterações
