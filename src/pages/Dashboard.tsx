@@ -1,66 +1,244 @@
-import { BarChart3, TrendingUp, Users, DollarSign, Activity, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { BarChart3, TrendingUp, Users, DollarSign, Activity, AlertTriangle, Upload, FileText, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { apiService } from "@/services/api";
+import { Venda, Estoque } from "@/types/api";
+import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
-const statsCards = [
-  {
-    title: "Receita Total",
-    value: "R$ 2,847,392",
-    change: "+12.5%",
-    changeType: "positive" as const,
-    icon: DollarSign,
-    description: "vs. mês anterior"
-  },
-  {
-    title: "Usuários Ativos",
-    value: "34,521",
-    change: "+8.2%",
-    changeType: "positive" as const,
-    icon: Users,
-    description: "últimos 30 dias"
-  },
-  {
-    title: "Conversões",
-    value: "2,847",
-    change: "-2.1%",
-    changeType: "negative" as const,
-    icon: TrendingUp,
-    description: "taxa de conversão"
-  },
-  {
-    title: "Performance",
-    value: "98.2%",
-    change: "+0.8%",
-    changeType: "positive" as const,
-    icon: Activity,
-    description: "uptime do sistema"
-  }
-];
-
-const insights = [
-  {
-    title: "Pico de Vendas Identificado",
-    description: "Vendas aumentaram 34% nas últimas 48 horas no segmento premium",
-    type: "opportunity",
-    priority: "high"
-  },
-  {
-    title: "Anomalia no Tráfego",
-    description: "Redução de 15% no tráfego orgânico detectada. Investigação recomendada",
-    type: "warning",
-    priority: "medium"
-  },
-  {
-    title: "Novo Padrão Comportamental",
-    description: "Usuários mobile passaram mais 23% de tempo na plataforma",
-    type: "insight",
-    priority: "low"
-  }
-];
+// NOTA: Insights agora gerados dinamicamente a partir dos dados carregados (até 50 registros cada)
+// Heurísticas simples (não IA real) mas úteis para sinalizar padrões imediatos.
 
 export default function Dashboard() {
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const [vendas, setVendas] = useState<Venda[]>([]);
+  const [estoque, setEstoque] = useState<Estoque[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalRevenue: 0,
+    totalProducts: 0,
+    totalStock: 0,
+    activeClients: 0,
+    prevRevenue: 0,
+    prevProducts: 0,
+    prevActiveClients: 0,
+    stockCoverageDays: 0,
+    prevStockCoverageDays: 0
+  });
+  const [health, setHealth] = useState<'ok' | 'erro' | 'carregando'>('carregando');
+
+  // ---- Derivações e Insights Dinâmicos ----
+  const computedInsights = useMemo(() => {
+    const list: { title: string; description: string; priority: 'high' | 'medium' | 'low'; }[] = [];
+
+    if (!vendas.length && !estoque.length) return list;
+
+    // Helper: agrupar por chave
+    const groupSum = <T,>(arr: T[], key: (t: T) => string, value: (t: T) => number) => {
+      const map = new Map<string, number>();
+      arr.forEach(item => {
+        const k = key(item);
+        map.set(k, (map.get(k) || 0) + value(item));
+      });
+      return map;
+    };
+
+    // 1. Crescimento de vendas (últimos 7 dias vs 7 dias anteriores)
+    if (vendas.length) {
+      const byDate = groupSum(vendas, v => v.data, v => v.zs_peso_liquido || 0);
+      const dates = Array.from(byDate.keys()).sort();
+      const recent = dates.slice(-7);
+      const prev = dates.slice(-14, -7);
+      const sumRecent = recent.reduce((s, d) => s + (byDate.get(d) || 0), 0);
+      const sumPrev = prev.reduce((s, d) => s + (byDate.get(d) || 0), 0);
+      if (sumRecent > 0 && sumPrev > 0) {
+        const growth = ((sumRecent - sumPrev) / sumPrev) * 100;
+        const direction = growth >= 0 ? 'crescimento' : 'queda';
+        const absGrowth = Math.abs(growth).toFixed(1);
+        list.push({
+          title: growth >= 0 ? 'Aceleração de Vendas' : 'Queda Recente em Vendas',
+            description: `Volume (peso líquido) ${direction} de ${absGrowth}% comparando últimos ${recent.length} dias vs período anterior. (Recente: ${sumRecent.toFixed(1)} vs Prev: ${sumPrev.toFixed(1)})`,
+          priority: Math.abs(growth) > 20 ? 'high' : Math.abs(growth) > 10 ? 'medium' : 'low'
+        });
+      }
+    }
+
+    // 2. Envelhecimento de estoque (itens com dias_em_estoque > 20)
+    if (estoque.length) {
+      const agingThreshold = 20;
+      const agingItems = estoque.filter(e => (e.dias_em_estoque || 0) > agingThreshold);
+      const ratio = agingItems.length / estoque.length;
+      list.push({
+        title: 'Envelhecimento de Estoque',
+        description: `${agingItems.length} de ${estoque.length} itens (${(ratio * 100).toFixed(1)}%) acima de ${agingThreshold} dias em estoque.`,
+        priority: ratio > 0.5 ? 'high' : ratio > 0.25 ? 'medium' : 'low'
+      });
+    }
+
+    // 3. Concentração de produto em vendas
+    if (vendas.length) {
+      const byProduct = groupSum(vendas, v => v.cod_produto, v => v.zs_peso_liquido || 0);
+      const total = Array.from(byProduct.values()).reduce((a, b) => a + b, 0);
+      if (total > 0) {
+        const sorted = Array.from(byProduct.entries()).sort((a, b) => b[1] - a[1]);
+        const [topProd, topVal] = sorted[0];
+        const share = topVal / total;
+        list.push({
+          title: 'Concentração de Produto',
+          description: `Produto ${topProd} responde por ${(share * 100).toFixed(1)}% do volume de vendas (peso líquido).`,
+          priority: share > 0.6 ? 'high' : share > 0.4 ? 'medium' : 'low'
+        });
+      }
+    }
+
+    // 4. Risco de baixa cobertura de estoque (estoque vs vendas recentes)
+    if (vendas.length && estoque.length) {
+      // Estimar demanda média diária dos últimos N dias (N = distinct dates)
+      const datesSet = new Set(vendas.map(v => v.data));
+      const days = datesSet.size || 1;
+      const totalDemand = vendas.reduce((s, v) => s + (v.zs_peso_liquido || 0), 0);
+      const daily = totalDemand / days;
+      const totalStock = estoque.reduce((s, e) => s + (e.es_totalestoque || 0), 0);
+      if (daily > 0) {
+        const coverageDays = totalStock / daily;
+        list.push({
+          title: 'Cobertura de Estoque',
+          description: `Cobertura estimada de ${(coverageDays).toFixed(1)} dias (Estoque: ${totalStock.toFixed(1)} / Demanda diária: ${daily.toFixed(1)}).`,
+          priority: coverageDays < 5 ? 'high' : coverageDays < 10 ? 'medium' : 'low'
+        });
+      }
+    }
+
+    // 5. Diversidade de clientes
+    if (vendas.length) {
+      const byClient = groupSum(vendas, v => v.cod_cliente, v => v.zs_peso_liquido || 0);
+      const total = Array.from(byClient.values()).reduce((a, b) => a + b, 0) || 1;
+      const sorted = Array.from(byClient.entries()).sort((a, b) => b[1] - a[1]);
+      const [topClient, topVal] = sorted[0];
+      const share = topVal / total;
+      list.push({
+        title: 'Concentração de Cliente',
+        description: `Cliente ${topClient} responde por ${(share * 100).toFixed(1)}% do volume. Total clientes: ${byClient.size}.`,
+        priority: share > 0.5 ? 'high' : share > 0.35 ? 'medium' : 'low'
+      });
+    }
+
+    return list.slice(0, 5);
+  }, [vendas, estoque]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Fetch vendas and estoque data
+      const [vendasData, estoqueData, healthResp] = await Promise.all([
+        apiService.getVendas({ limit: 50 }),
+        apiService.getEstoque({ limit: 50 }),
+        apiService.healthCheck().catch(() => null)
+      ]);
+
+      setVendas(vendasData);
+      setEstoque(estoqueData);
+
+      // Calculate statistics + period comparison (split by date half)
+      const totalRevenue = vendasData.reduce((sum, venda) => sum + (venda.zs_peso_liquido || 0), 0);
+      const totalProducts = new Set(vendasData.map(v => v.cod_produto)).size;
+      const totalStock = estoqueData.reduce((sum, item) => sum + (item.es_totalestoque || 0), 0);
+      const activeClients = new Set(vendasData.map(v => v.cod_cliente)).size;
+
+      const dateList = Array.from(new Set(vendasData.map(v => v.data))).sort();
+      const half = Math.max(1, Math.floor(dateList.length / 2));
+      const prevDateSet = new Set(dateList.slice(0, half));
+      const recentDateSet = new Set(dateList.slice(half));
+      const prevRevenue = vendasData.filter(v => prevDateSet.has(v.data)).reduce((s, v) => s + (v.zs_peso_liquido || 0), 0);
+      const prevProducts = new Set(vendasData.filter(v => prevDateSet.has(v.data)).map(v => v.cod_produto)).size;
+      const prevActiveClients = new Set(vendasData.filter(v => prevDateSet.has(v.data)).map(v => v.cod_cliente)).size;
+
+      // Stock coverage (current only)
+      const distinctDays = new Set(vendasData.map(v => v.data)).size || 1;
+      const dailyDemand = totalRevenue / distinctDays || 0;
+      const stockCoverageDays = dailyDemand ? totalStock / dailyDemand : 0;
+
+      setStats({
+        totalRevenue,
+        totalProducts,
+        totalStock,
+        activeClients,
+        prevRevenue: prevRevenue || totalRevenue,
+        prevProducts: prevProducts || totalProducts,
+        prevActiveClients: prevActiveClients || activeClients,
+        stockCoverageDays,
+        prevStockCoverageDays: stockCoverageDays // sem histórico anterior real
+      });
+      setHealth(healthResp && healthResp.status === 'ok' ? 'ok' : 'erro');
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      setHealth('erro');
+      toast({
+        title: "Erro ao carregar dados",
+        description: "Não foi possível carregar os dados do dashboard. Verifique sua conexão.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const pct = (now: number, prev: number) => {
+    if (prev === 0) return now > 0 ? 100 : 0;
+    return ((now - prev) / prev) * 100;
+  };
+  const formatChange = (val: number) => `${val >= 0 ? '+' : ''}${val.toFixed(1)}%`;
+
+  const revenueChange = pct(stats.totalRevenue, stats.prevRevenue);
+  const productChange = pct(stats.totalProducts, stats.prevProducts);
+  const clientChange = pct(stats.activeClients, stats.prevActiveClients);
+  const coverageChange = pct(stats.stockCoverageDays, stats.prevStockCoverageDays);
+
+  const statsCards = [
+    {
+      title: "Volume (Peso Líquido)",
+      value: `${stats.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`,
+      change: formatChange(revenueChange),
+      changeType: revenueChange >= 0 ? 'positive' as const : 'negative' as const,
+      icon: DollarSign,
+      description: "metade recente vs anterior"
+    },
+    {
+      title: "Produtos Únicos",
+      value: stats.totalProducts.toString(),
+      change: formatChange(productChange),
+      changeType: productChange >= 0 ? 'positive' as const : 'negative' as const,
+      icon: BarChart3,
+      description: "diversidade no período"
+    },
+    {
+      title: "Cobertura Estoque",
+      value: `${stats.stockCoverageDays.toFixed(1)} dias`,
+      change: formatChange(coverageChange),
+      changeType: coverageChange >= 0 ? 'positive' as const : 'negative' as const,
+      icon: Activity,
+      description: "estoque / demanda"
+    },
+    {
+      title: "Clientes Únicos",
+      value: stats.activeClients.toString(),
+      change: formatChange(clientChange),
+      changeType: clientChange >= 0 ? 'positive' as const : 'negative' as const,
+      icon: Users,
+      description: "base clientes"
+    }
+  ];
   return (
     <div className="space-y-6">
       {/* Header Section */}
@@ -110,71 +288,122 @@ export default function Dashboard() {
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart Area */}
+        {/* Data Tables */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Vendas Table */}
           <Card className="card-elevation">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-golden" />
-                Análise de Tendências
+                <TrendingUp className="h-5 w-5 text-golden" />
+                Dados de Vendas Recentes
               </CardTitle>
               <CardDescription>
-                Evolução das métricas principais nos últimos 6 meses
+                Últimas vendas registradas no sistema
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-80 bg-gradient-to-br from-muted/30 to-muted/10 rounded-lg flex items-center justify-center">
-                <div className="text-center text-muted-foreground">
-                  <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-sm">Gráfico interativo de tendências</p>
-                  <p className="text-xs mt-1">Conecte ao Supabase para dados reais</p>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <div className="text-muted-foreground">Carregando dados...</div>
                 </div>
-              </div>
+              ) : vendas.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Produto</TableHead>
+                        <TableHead>Peso Líquido</TableHead>
+                        <TableHead>Centro</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {vendas.slice(0, 10).map((venda) => (
+                        <TableRow key={venda.id_venda}>
+                          <TableCell>{new Date(venda.data).toLocaleDateString('pt-BR')}</TableCell>
+                          <TableCell>{venda.cod_cliente}</TableCell>
+                          <TableCell>{venda.produto || venda.cod_produto}</TableCell>
+                          <TableCell>{venda.zs_peso_liquido?.toLocaleString('pt-BR') || 'N/A'}</TableCell>
+                          <TableCell>{venda.zs_centro || 'N/A'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center text-muted-foreground py-8">
+                  Nenhum dado de vendas encontrado
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Performance Metrics */}
+          {/* Estoque Table */}
           <Card className="card-elevation">
             <CardHeader>
-              <CardTitle>Métricas de Performance</CardTitle>
-              <CardDescription>Indicadores chave de desempenho</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-golden" />
+                Dados de Estoque
+              </CardTitle>
+              <CardDescription>
+                Status atual do estoque por produto
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Taxa de Conversão</span>
-                  <span className="font-medium">73%</span>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <div className="text-muted-foreground">Carregando dados...</div>
                 </div>
-                <Progress value={73} className="h-2" />
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Satisfação do Cliente</span>
-                  <span className="font-medium">91%</span>
+              ) : estoque.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Produto</TableHead>
+                        <TableHead>Estoque Total</TableHead>
+                        <TableHead>Dias em Estoque</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {estoque.slice(0, 10).map((item) => (
+                        <TableRow key={item.id_estoque}>
+                          <TableCell>{new Date(item.data).toLocaleDateString('pt-BR')}</TableCell>
+                          <TableCell>{item.cod_cliente}</TableCell>
+                          <TableCell>{item.produto || item.cod_produto}</TableCell>
+                          <TableCell>{item.es_totalestoque?.toLocaleString('pt-BR') || 'N/A'}</TableCell>
+                          <TableCell>{item.dias_em_estoque || 'N/A'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
-                <Progress value={91} className="h-2" />
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Eficiência Operacional</span>
-                  <span className="font-medium">67%</span>
+              ) : (
+                <div className="text-center text-muted-foreground py-8">
+                  Nenhum dado de estoque encontrado
                 </div>
-                <Progress value={67} className="h-2" />
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* AI Insights */}
+          {/* Dynamic Insights */}
           <Card className="card-elevation">
             <CardHeader>
               <CardTitle className="text-base">Insights da IA</CardTitle>
-              <CardDescription>Análises automáticas dos seus dados</CardDescription>
+              <CardDescription>
+                Análises heurísticas em cima dos dados carregados (máx 50 registros). Indicativas, não preditivas.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {insights.map((insight, index) => (
+              {computedInsights.length === 0 && (
+                <div className="text-xs text-muted-foreground">Sem dados suficientes para gerar insights.</div>
+              )}
+              {computedInsights.map((insight, index) => (
                 <div key={index} className="p-3 rounded-lg border bg-card/50 hover:bg-accent/50 smooth-transition">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h4 className="font-medium text-sm">{insight.title}</h4>
@@ -199,17 +428,33 @@ export default function Dashboard() {
               <CardTitle className="text-base">Ações Rápidas</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                <TrendingUp className="mr-2 h-4 w-4" />
-                Gerar Relatório Semanal
+              <Button 
+                variant="outline" 
+                className="w-full justify-start" 
+                size="sm"
+                onClick={() => navigate('/upload')}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Upload CSV (Vendas/Estoque)
               </Button>
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                <Users className="mr-2 h-4 w-4" />
-                Análise de Segmentação
+              <Button 
+                variant="outline" 
+                className="w-full justify-start" 
+                size="sm"
+                onClick={() => navigate('/reports')}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Gerar Relatório por Email
               </Button>
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                <AlertTriangle className="mr-2 h-4 w-4" />
-                Configurar Alertas
+              <Button 
+                variant="outline" 
+                className="w-full justify-start" 
+                size="sm"
+                onClick={() => fetchDashboardData()}
+                disabled={isLoading}
+              >
+                <Activity className="mr-2 h-4 w-4" />
+                Atualizar Dados
               </Button>
             </CardContent>
           </Card>
@@ -222,16 +467,18 @@ export default function Dashboard() {
             <CardContent>
               <div className="space-y-3 text-sm">
                 <div className="flex items-center justify-between">
-                  <span>Processamento de Dados</span>
-                  <Badge className="bg-green-100 text-green-700 border-green-200">Online</Badge>
+                  <span>API Backend</span>
+                  {health === 'carregando' && <Badge className="bg-muted text-foreground">...</Badge>}
+                  {health === 'ok' && <Badge className="bg-green-100 text-green-700 border-green-200">OK</Badge>}
+                  {health === 'erro' && <Badge className="bg-red-100 text-red-700 border-red-200">Falha</Badge>}
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>API Externa</span>
-                  <Badge className="bg-green-100 text-green-700 border-green-200">Conectado</Badge>
+                  <span>Vendas Carregadas</span>
+                  <Badge variant="outline">{vendas.length}</Badge>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>IA Insights</span>
-                  <Badge className="bg-green-100 text-green-700 border-green-200">Ativo</Badge>
+                  <span>Estoque Carregado</span>
+                  <Badge variant="outline">{estoque.length}</Badge>
                 </div>
               </div>
             </CardContent>

@@ -1,0 +1,5 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+	<!-- Simple head-and-shoulders silhouette, no facial details -->
+	<circle cx="12" cy="8" r="3" />
+	<path d="M4 20c0-3.314 2.686-6 6-6h4c3.314 0 6 2.686 6 6" />
+</svg>
