@@ -10,8 +10,8 @@ export interface ChatMessage {
   ts: number
 }
 
-// Placeholder WebSocket URL — TODO: replace with your real WS endpoint
-const WS_URL = 'wss://example.com/ws'
+// WebSocket URL from environment variables
+const WS_URL = import.meta.env.VITE_WS_URL || 'wss://api-6-semestre-backend.onrender.com/wb/chatbot'
 
 /**
  * Minimal WebSocket wrapper with simple reconnection logic.

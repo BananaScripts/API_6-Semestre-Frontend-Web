@@ -19,26 +19,60 @@ export function getFileMetadata(file: File): FileMetadata {
   return { name: file.name, size: file.size, type: file.type }
 }
 
-// Placeholder: implement real API call integration here
+// API Base URL and endpoints from environment
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api-6-semestre-backend.onrender.com'
+const RELATORIOS_ENDPOINT = import.meta.env.VITE_RELATORIOS_ENDPOINT || '/relatorios/enviar'
+const UPLOAD_ENDPOINT = import.meta.env.VITE_UPLOAD_ENDPOINT || '/upload'
+const AUTH_TOKEN_KEY = import.meta.env.VITE_AUTH_TOKEN_KEY || 'auth_token'
+
+// Send report email to backend
 export async function sendReportEmail(form: EmailForm): Promise<void> {
-  // TODO: implement API call to send email/report
-  return new Promise((resolve) => setTimeout(resolve, 800))
+  const token = localStorage.getItem(AUTH_TOKEN_KEY)
+  
+  const url = new URL(RELATORIOS_ENDPOINT, API_BASE_URL)
+  url.searchParams.append('assunto', form.subject)
+  if (form.message) {
+    url.searchParams.append('corpo', form.message)
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    },
+    body: JSON.stringify({ email: form.recipient })
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to send email: ${response.statusText}`)
+  }
 }
 
-// Placeholder: implement real upload integration here
+// Upload file to backend
 export async function uploadFile(type: DatasetType, file: File, onProgress?: (p: number) => void): Promise<void> {
-  // TODO: replace mock with real upload to backend / cloud storage
-  return new Promise((resolve) => {
-    let progress = 0
-    const id = setInterval(() => {
-      progress += 20
-      if (onProgress) onProgress(Math.min(progress, 100))
-      if (progress >= 100) {
-        clearInterval(id)
-        resolve()
-      }
-    }, 150)
+  const token = localStorage.getItem(AUTH_TOKEN_KEY)
+  const tipoMap: Record<DatasetType, string> = { sales: 'vendas', inventory: 'estoque' }
+  const tipo = tipoMap[type] || 'vendas'
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(`${API_BASE_URL}${UPLOAD_ENDPOINT}/${tipo}`, {
+    method: 'POST',
+    headers: {
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    },
+    body: formData
   })
+
+  if (onProgress) {
+    onProgress(100)
+  }
+
+  if (!response.ok) {
+    throw new Error(`Upload failed: ${response.statusText}`)
+  }
 }
 
 export default function Dashboard(): JSX.Element {

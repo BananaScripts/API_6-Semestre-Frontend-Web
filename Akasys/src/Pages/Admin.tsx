@@ -22,17 +22,59 @@ const MOCK_USERS: UserRow[] = [
   { id: 'u11', name: 'Lara Moon', email: 'lara@example.com', role: 'member' },
 ]
 
+// API Base URL and endpoints from environment
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api-6-semestre-backend.onrender.com'
+const USUARIO_ENDPOINT = import.meta.env.VITE_USUARIO_ENDPOINT || '/usuario'
+const AUTH_TOKEN_KEY = import.meta.env.VITE_AUTH_TOKEN_KEY || 'auth_token'
+
 /**
- * TODO: Replace updateUser/deleteUser with real API calls and secure actions.
+ * Update user via API
  */
 export async function updateUser(user: UserRow): Promise<UserRow> {
-  // TODO: implement API call to update user
-  return new Promise((resolve) => setTimeout(() => resolve(user), 600))
+  const token = localStorage.getItem(AUTH_TOKEN_KEY)
+
+  const response = await fetch(`${API_BASE_URL}${USUARIO_ENDPOINT}/${user.id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    },
+    body: JSON.stringify({
+      nome: user.name,
+      email: user.email,
+      role: user.role
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to update user: ${response.statusText}`)
+  }
+
+  const data = await response.json()
+  return {
+    id: data.id.toString(),
+    name: data.nome,
+    email: data.email,
+    role: data.role || user.role
+  }
 }
 
+/**
+ * Delete user via API
+ */
 export async function deleteUser(id: string): Promise<void> {
-  // TODO: implement API call to delete user
-  return new Promise((resolve) => setTimeout(() => resolve(), 500))
+  const token = localStorage.getItem(AUTH_TOKEN_KEY)
+
+  const response = await fetch(`${API_BASE_URL}${USUARIO_ENDPOINT}/${id}`, {
+    method: 'DELETE',
+    headers: {
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    }
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete user: ${response.statusText}`)
+  }
 }
 
 export default function Admin(): JSX.Element {

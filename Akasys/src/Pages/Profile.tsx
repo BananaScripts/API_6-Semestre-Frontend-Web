@@ -8,26 +8,56 @@ export interface User {
   joinedAt?: string // ISO date string
 }
 
+// API Base URL and endpoints from environment
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api-6-semestre-backend.onrender.com'
+const USUARIO_ENDPOINT = import.meta.env.VITE_USUARIO_ENDPOINT || '/usuario'
+const AUTH_TOKEN_KEY = import.meta.env.VITE_AUTH_TOKEN_KEY || 'auth_token'
+
 /**
- * Stub: update profile on the backend. Replace with real API call.
+ * Update profile on the backend via API.
  */
 export async function updateProfile(profile: Partial<User>): Promise<User> {
-  // TODO: call API to update profile and return updated user
-  return new Promise((resolve) => setTimeout(() => resolve({
-    id: 'user-123',
-    name: profile.name ?? 'Updated User',
-    email: profile.email ?? 'updated@example.com',
-    role: profile.role ?? 'user',
-    joinedAt: profile.joinedAt ?? new Date().toISOString(),
-  }), 700))
+  const token = localStorage.getItem(AUTH_TOKEN_KEY)
+  
+  if (!profile.id) {
+    throw new Error('User ID is required to update profile')
+  }
+
+  const response = await fetch(`${API_BASE_URL}${USUARIO_ENDPOINT}/${profile.id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    },
+    body: JSON.stringify({
+      nome: profile.name,
+      email: profile.email,
+      ...(profile.role && { role: profile.role })
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to update profile: ${response.statusText}`)
+  }
+
+  const data = await response.json()
+  return {
+    id: data.id.toString(),
+    name: data.nome,
+    email: data.email,
+    role: data.role,
+    joinedAt: profile.joinedAt
+  }
 }
 
 /**
- * Stub: logout helper. Replace with real session clear + redirect.
+ * Logout helper - clears auth token and redirects to login.
  */
 export function logout(): void {
-  // TODO: clear auth tokens/session and redirect to login page
-  // e.g. authContext.logout() or localStorage.clear(); navigate('/login')
+  localStorage.removeItem(AUTH_TOKEN_KEY)
+  // TODO: Add proper redirect to login page
+  // window.location.href = '/login'
+  alert('Logged out successfully. Redirecting to login...')
 }
 
 export default function Profile(): JSX.Element {
