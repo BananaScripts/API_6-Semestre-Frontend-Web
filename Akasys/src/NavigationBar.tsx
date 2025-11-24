@@ -1,213 +1,165 @@
-import React, { useState } from 'react'
-// If your project doesn't use react-router, replace the `Link` imports/usages
-// with regular `<a href="...">` elements.
-import { Link } from 'react-router-dom'
+import React from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { useAuth } from './contexts/AuthContext'
 
 // Types
 export interface NavLinkItem {
   name: string
   to: string
+  icon: string
   /** Optional: hide link based on user role or other checks */
   show?: boolean
 }
 
 export interface NavigationBarProps {
   links?: NavLinkItem[]
-  /** TODO: Inject current user/session here when available */
-  currentUser?: { id?: string; name?: string; role?: string } | null
-  /** TODO: Implement logout handler and pass it in from parent */
-  onLogout?: () => void
 }
 
 // Navigation links sourced from the `src/Pages` folder
 // Pages present: Admin.tsx, Chat.tsx, Dashboard.tsx, Profile.tsx
 export const PAGES: NavLinkItem[] = [
-  { name: 'Dashboard', to: '/dashboard' },
-  { name: 'Chat', to: '/chat' },
-  { name: 'Profile', to: '/profile' },
-  { name: 'Admin', to: '/admin' },
+  { name: 'Dashboard', to: '/dashboard', icon: '📊' },
+  { name: 'Chat', to: '/chat', icon: '💬' },
+  { name: 'Perfil', to: '/profile', icon: '👤' },
+  { name: 'Admin', to: '/admin', icon: '⚙️' },
 ]
 
 const DEFAULT_LINKS: NavLinkItem[] = PAGES
 
 /**
  * NavigationBar
- * - Minimal, responsive navigation using react-router `<Link>`
- * - Keyboard accessible toggler and link focus states
- * - Simple state-based mobile menu toggle
+ * - Barra de navegação vertical minimalista
+ * - Design preto e branco com bordas arredondadas
+ * - Ícones e nomes para cada página
  */
 export default function NavigationBar({
   links = DEFAULT_LINKS,
-  currentUser = null,
-  onLogout,
 }: NavigationBarProps) {
-  const [open, setOpen] = useState(false)
+  const { user } = useAuth()
+  const location = useLocation()
 
   const visibleLinks = links.filter((l) => l.show !== false)
 
   return (
-    <header role="banner" style={{ borderBottom: '1px solid #e6e6e6' }}>
-      <nav
-        role="navigation"
-        aria-label="Main navigation"
-        style={{ maxWidth: 1100, margin: '0 auto', padding: '0.5rem 1rem' }}
-      >
-        <div
+    <aside 
+      role="navigation"
+      aria-label="Navegação principal"
+      style={{ 
+        width: '220px',
+        minHeight: '100vh',
+        backgroundColor: '#1e293b',
+        borderRight: '1px solid #334155',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '24px 16px',
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        bottom: 0
+      }}
+    >
+      {/* Logo */}
+      <div style={{ marginBottom: '40px', paddingLeft: '8px' }}>
+        <Link to="/" aria-label="Início" style={{ 
+          textDecoration: 'none',
+          color: '#ffffff',
+          fontWeight: 700,
+          fontSize: 24,
+          letterSpacing: '-0.025em',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          ⚡ Akasys
+        </Link>
+      </div>
+
+      {/* Navigation Links */}
+      <nav style={{ flex: 1 }}>
+        <ul
           style={{
+            listStyle: 'none',
+            padding: 0,
+            margin: 0,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
+            flexDirection: 'column',
+            gap: 8,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Link to="/" aria-label="Home" style={{ textDecoration: 'none' }}>
-              <strong style={{ fontSize: 18 }}>Akasys</strong>
-            </Link>
-          </div>
-
-          {/* Mobile burger toggler */}
-          <button
-            onClick={() => setOpen((s) => !s)}
-            aria-expanded={open}
-            aria-controls="main-navigation"
-            aria-label={open ? 'Close menu' : 'Open menu'}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 8,
-              background: 'transparent',
-              border: '1px solid transparent',
-              borderRadius: 6,
-            }}
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              aria-hidden
-            >
-              {open ? (
-                <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              ) : (
-                <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              )}
-            </svg>
-          </button>
-        </div>
-
-        {/* Menu: responsive — show horizontally on wide screens, toggle on mobile */}
-        <div
-          id="main-navigation"
-          style={{
-            marginTop: 10,
-            display: open ? 'block' : 'none',
-          }}
-        >
-          <ul
-            style={{
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-            }}
-          >
-            {visibleLinks.map((l) => (
+          {visibleLinks.map((l) => {
+            const isActive = location.pathname === l.to
+            return (
               <li key={l.to}>
                 <Link
                   to={l.to}
-                  onClick={() => setOpen(false)}
                   style={{
-                    display: 'inline-block',
-                    padding: '8px 10px',
-                    borderRadius: 6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 16px',
+                    borderRadius: 12,
                     textDecoration: 'none',
-                    color: '#111',
+                    color: isActive ? '#ffffff' : '#94a3b8',
+                    backgroundColor: isActive ? '#334155' : 'transparent',
+                    transition: 'all 0.2s',
+                    fontWeight: isActive ? 600 : 500,
+                    fontSize: '15px'
                   }}
-                  // keyboard focus visible
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      // allow Enter to behave like click for accessibility
-                      ;(e.target as HTMLElement).click()
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor = '#475569'
+                      e.currentTarget.style.color = '#ffffff'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor = 'transparent'
+                      e.currentTarget.style.color = '#94a3b8'
                     }
                   }}
                 >
-                  {l.name}
+                  <span style={{ fontSize: '20px' }}>{l.icon}</span>
+                  <span>{l.name}</span>
                 </Link>
               </li>
-            ))}
-          </ul>
+            )
+          })}
+        </ul>
+      </nav>
 
-          <div style={{ marginTop: 8 }}>
-            {currentUser ? (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 14 }}>Hi, {currentUser.name ?? 'User'}</span>
-                <button
-                  onClick={onLogout}
-                  style={{ padding: '6px 10px', borderRadius: 6, cursor: 'pointer' }}
-                >
-                  Logout
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Link to="/login" style={{ padding: '6px 10px', borderRadius: 6, textDecoration: 'none' }}>
-                  Login
-                </Link>
-                <Link to="/signup" style={{ padding: '6px 10px', borderRadius: 6, textDecoration: 'none' }}>
-                  Sign up
-                </Link>
-              </div>
-            )}
+      {/* User Info */}
+      {user && (
+        <div style={{ 
+          padding: '16px',
+          borderTop: '1px solid #334155',
+          marginTop: '16px'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            gap: '6px'
+          }}>
+            <span style={{ 
+              fontSize: 14, 
+              color: '#f1f5f9',
+              fontWeight: 600
+            }}>
+              {user.name}
+            </span>
+            <span style={{ 
+              fontSize: 12, 
+              color: '#cbd5e1',
+              backgroundColor: '#334155',
+              padding: '4px 8px',
+              borderRadius: 8,
+              display: 'inline-block',
+              width: 'fit-content'
+            }}>
+              {user.role || 'Membro'}
+            </span>
           </div>
         </div>
-
-        {/* Inline small responsive hint: show horizontal menu on wider viewports via media query.
-            For simplicity we include a tiny CSS snippet below — paste it into your global css.
-        */}
-
-        {/*
-          CSS to add to your global stylesheet for horizontal desktop layout:
-
-          @media (min-width: 640px) {
-            #main-navigation { display: block !important; }
-            #main-navigation ul { flex-direction: row; gap: 12px; align-items: center; }
-            #main-navigation ul li a { padding: 8px 12px; }
-            button[aria-controls="main-navigation"] { display: none; }
-          }
-
-          /* Focus styles example */
-          a:focus, button:focus { outline: 3px solid rgba(59,130,246,0.3); outline-offset: 2px; }
-        */}
-      </nav>
-    </header>
+      )}
+    </aside>
   )
 }
-
-/* Example integration (comment):
-import React from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import NavigationBar from './Pages/NavigationBar'
-
-function AppLayout() {
-  return (
-    <BrowserRouter>
-      <NavigationBar />
-      <main>
-        <Routes>
-          <Route path="/dashboard" element={<div>Dashboard</div>} />
-          <Route path="/chat" element={<div>Chat</div>} />
-          <Route path="/profile" element={<div>Profile</div>} />
-          <Route path="/admin" element={<div>Admin</div>} />
-        </Routes>
-      </main>
-    </BrowserRouter>
-  )
-}
-
-*/

@@ -40,13 +40,31 @@ function createWsWrapper(onMessage: (msg: ChatMessage) => void) {
         ws.onmessage = (ev) => {
           try {
             const data = JSON.parse(ev.data)
-            // Expect incoming messages to follow ChatMessage shape
-            if (data && data.id && data.text) {
-              onMessage({ ...data, ts: data.ts ?? Date.now() })
+            // Backend returns an object like {
+            //   pergunta_original, match_intencao, answer
+            // }
+            // Normalize to ChatMessage shape used by the UI.
+            let text = ''
+            if (typeof data === 'string') {
+              text = data
+            } else if (data.answer) {
+              text = data.answer
+            } else if (data.text) {
+              text = data.text
+            } else {
+              text = JSON.stringify(data)
             }
+
+            const msg: ChatMessage = {
+              id: (data && data.id) || String(Date.now()) + Math.random().toString(36).slice(2),
+              text,
+              sender: 'system',
+              ts: (data && data.ts) || Date.now()
+            }
+            onMessage(msg)
           } catch (err) {
             // If message is plain text, wrap it
-            onMessage({ id: String(Math.random()), text: ev.data, sender: 'system', ts: Date.now() })
+            onMessage({ id: String(Math.random()), text: String(ev.data), sender: 'system', ts: Date.now() })
           }
         }
         ws.onclose = () => {
@@ -80,8 +98,9 @@ function createWsWrapper(onMessage: (msg: ChatMessage) => void) {
 
   function send(text: string): ChatMessage {
     if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error('Socket not open')
+    // Backend expects plain text, not a wrapped JSON message.
+    ws.send(String(text))
     const msg: ChatMessage = { id: String(Date.now()) + Math.random().toString(36).slice(2), text, sender: 'user', ts: Date.now() }
-    ws.send(JSON.stringify(msg))
     return msg
   }
 
@@ -154,43 +173,111 @@ export default function Chat(): JSX.Element {
   }
 
   return (
-    <div style={{ padding: 12, maxWidth: 900, margin: '0 auto' }}>
-      <style>{`
-        .chat-box { border:1px solid #e6e6e6; border-radius:8px; display:flex; flex-direction:column; height:400px }
-        .messages { padding:12px; overflow:auto; flex:1 }
-        .message { margin-bottom:8px; }
-        .meta { font-size:12px; color:#666 }
-        .controls { display:flex; gap:8px; padding:12px; border-top:1px solid #f1f1f1 }
-        input[type="text"] { flex:1; padding:8px; border-radius:6px; border:1px solid #ddd }
-        button { padding:8px 12px; border-radius:6px }
-      `}</style>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <h1 style={{ 
+        fontSize: '32px', 
+        fontWeight: 700, 
+        marginBottom: '8px',
+        color: '#f1f5f9'
+      }}>
+        Chat
+      </h1>
+      <p style={{ 
+        color: '#94a3b8', 
+        marginBottom: '32px',
+        fontSize: '16px'
+      }}>
+        Converse com o assistente
+      </p>
 
-      <h2>Chat</h2>
-      <div className="chat-box" role="region" aria-label="Chat" aria-live="polite">
+      <div 
+        style={{
+          backgroundColor: '#1e293b',
+          border: '1px solid #334155',
+          borderRadius: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0,
+          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.3)'
+        }}
+        role="region" 
+        aria-label="Chat" 
+        aria-live="polite"
+      >
         <div
-          className="messages"
           role="log"
           aria-live="polite"
           aria-atomic="false"
           ref={containerRef}
+          style={{
+            padding: '24px',
+            overflowY: 'auto',
+            flex: 1
+          }}
         >
-          {messages.length === 0 && <div className="muted">No messages yet.</div>}
+          {messages.length === 0 && (
+            <div style={{ 
+              color: '#64748b', 
+              textAlign: 'center',
+              paddingTop: '40px',
+              fontSize: '14px'
+            }}>
+              Nenhuma mensagem ainda. Comece a conversa!
+            </div>
+          )}
           {messages.map((m) => (
-            <div key={m.id} className="message" aria-label={`${m.sender} message`}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <strong>{m.sender === 'user' ? 'You' : 'System'}</strong>
-                <span className="meta">{formatTs(m.ts)}</span>
+            <div 
+              key={m.id} 
+              style={{
+                marginBottom: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: m.sender === 'user' ? 'flex-end' : 'flex-start'
+              }}
+              aria-label={`mensagem de ${m.sender === 'user' ? 'você' : 'sistema'}`}
+            >
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '6px'
+              }}>
+                <strong style={{ 
+                  fontSize: '14px',
+                  color: m.sender === 'user' ? '#f1f5f9' : '#94a3b8'
+                }}>
+                  {m.sender === 'user' ? 'Você' : 'Sistema'}
+                </strong>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>
+                  {formatTs(m.ts)}
+                </span>
               </div>
-              <div>{m.text}</div>
+              <div style={{
+                backgroundColor: m.sender === 'user' ? '#3b82f6' : '#334155',
+                color: '#ffffff',
+                padding: '12px 16px',
+                borderRadius: '12px',
+                maxWidth: '70%',
+                wordWrap: 'break-word',
+                fontSize: '14px'
+              }}>
+                {m.text}
+              </div>
             </div>
           ))}
         </div>
 
-        <div className="controls">
+        <div style={{
+          display: 'flex',
+          gap: '12px',
+          padding: '20px',
+          borderTop: '1px solid #334155'
+        }}>
           <input
             type="text"
-            aria-label="Type a message"
-            placeholder={connected ? 'Type a message and press Enter' : 'Connecting...'}
+            aria-label="Digite uma mensagem"
+            placeholder={connected ? 'Digite uma mensagem e pressione Enter' : 'Conectando...'}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -200,20 +287,81 @@ export default function Chat(): JSX.Element {
               }
             }}
             disabled={!connected}
+            style={{
+              flex: 1,
+              padding: '12px 16px',
+              borderRadius: '10px',
+              border: '1px solid #475569',
+              fontSize: '14px',
+              outline: 'none',
+              transition: 'all 0.2s',
+              backgroundColor: '#0f172a',
+              color: '#f1f5f9'
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = '#64748b'
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(100, 116, 139, 0.1)'
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = '#475569'
+              e.currentTarget.style.boxShadow = 'none'
+            }}
           />
-          <button onClick={sendCurrent} disabled={!connected || !input.trim()} aria-disabled={!connected}>
-            Send
+          <button 
+            onClick={sendCurrent} 
+            disabled={!connected || !input.trim()} 
+            aria-disabled={!connected}
+            style={{
+              padding: '12px 24px',
+              borderRadius: '10px',
+              backgroundColor: '#3b82f6',
+              color: '#ffffff',
+              border: 'none',
+              fontWeight: 600,
+              fontSize: '14px',
+              cursor: (!connected || !input.trim()) ? 'not-allowed' : 'pointer',
+              opacity: (!connected || !input.trim()) ? 0.4 : 1,
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              if (connected && input.trim()) {
+                e.currentTarget.style.backgroundColor = '#2563eb'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (connected && input.trim()) {
+                e.currentTarget.style.backgroundColor = '#3b82f6'
+              }
+            }}
+          >
+            Enviar
           </button>
         </div>
       </div>
 
-      <div style={{ marginTop: 8, fontSize: 13 }}>
-        <span style={{ marginRight: 12 }}>{connected ? 'Connected' : 'Disconnected'}</span>
-        {error && <span style={{ color: 'crimson' }}>Error: {error}</span>}
+      <div style={{ 
+        marginTop: '16px', 
+        fontSize: '13px',
+        color: '#94a3b8',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px'
+      }}>
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px'
+        }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            backgroundColor: connected ? '#10b981' : '#ef4444'
+          }} />
+          {connected ? 'Conectado' : 'Desconectado'}
+        </span>
+        {error && <span style={{ color: '#dc2626' }}>Erro: {error}</span>}
       </div>
-
-      {/* TODO: Attach auth token to WS_URL or use a secure mechanism before production. */}
-      {/* TODO: Wire incoming/outgoing messages format to your backend AI/chat system. */}
     </div>
   )
 }

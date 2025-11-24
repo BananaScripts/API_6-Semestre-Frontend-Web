@@ -25,10 +25,10 @@ const RELATORIOS_ENDPOINT = import.meta.env.VITE_RELATORIOS_ENDPOINT || '/relato
 const UPLOAD_ENDPOINT = import.meta.env.VITE_UPLOAD_ENDPOINT || '/upload'
 const AUTH_TOKEN_KEY = import.meta.env.VITE_AUTH_TOKEN_KEY || 'auth_token'
 
-// Send report email to backend
-export async function sendReportEmail(form: EmailForm): Promise<void> {
+// Send report email to backend (improved error extraction)
+export async function sendReportEmail(form: EmailForm): Promise<string> {
   const token = localStorage.getItem(AUTH_TOKEN_KEY)
-  
+
   const url = new URL(RELATORIOS_ENDPOINT, API_BASE_URL)
   url.searchParams.append('assunto', form.subject)
   if (form.message) {
@@ -45,34 +45,76 @@ export async function sendReportEmail(form: EmailForm): Promise<void> {
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to send email: ${response.statusText}`)
+    let errMsg = response.statusText
+    try {
+      const data = await response.json()
+      if (data && data.detail) errMsg = data.detail
+      else if (data && data.msg) errMsg = data.msg
+    } catch (e) {
+      // ignore parse errors
+    }
+    throw new Error(`Falha ao enviar relatório: ${errMsg}`)
   }
-}
 
+  // parse success response and return message when available
+  try {
+    const data = await response.json()
+    if (data && (data.msg || data.status)) return data.msg || data.status
+  } catch (e) {
+    // ignore parse errors and fallthrough to default message
+  }
+  return 'Relatório enviado com sucesso.'
+}
 // Upload file to backend
 export async function uploadFile(type: DatasetType, file: File, onProgress?: (p: number) => void): Promise<void> {
   const token = localStorage.getItem(AUTH_TOKEN_KEY)
   const tipoMap: Record<DatasetType, string> = { sales: 'vendas', inventory: 'estoque' }
   const tipo = tipoMap[type] || 'vendas'
 
-  const formData = new FormData()
-  formData.append('file', file)
+  const url = `${API_BASE_URL}${UPLOAD_ENDPOINT}/${tipo}`
 
-  const response = await fetch(`${API_BASE_URL}${UPLOAD_ENDPOINT}/${tipo}`, {
-    method: 'POST',
-    headers: {
-      ...(token && { 'Authorization': `Bearer ${token}` })
-    },
-    body: formData
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', url)
+
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    }
+
+    xhr.upload.onprogress = (ev) => {
+      if (!ev.lengthComputable) return
+      const percent = Math.round((ev.loaded / ev.total) * 100)
+      if (onProgress) onProgress(percent)
+    }
+
+    xhr.onload = () => {
+      const status = xhr.status
+      if (status >= 200 && status < 300) {
+        if (onProgress) onProgress(100)
+        resolve()
+      } else {
+        let msg = xhr.statusText || `HTTP ${status}`
+        try {
+          const json = xhr.response && typeof xhr.response === 'object' ? xhr.response : JSON.parse(xhr.responseText || '{}')
+          if (json && json.detail) msg = json.detail
+        } catch (e) {
+          // ignore parse errors
+        }
+        reject(new Error(`Upload failed: ${msg}`))
+      }
+    }
+
+    xhr.onerror = () => reject(new Error('Network error during upload'))
+    xhr.onabort = () => reject(new Error('Upload aborted'))
+
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      xhr.send(formData)
+    } catch (err) {
+      reject(err)
+    }
   })
-
-  if (onProgress) {
-    onProgress(100)
-  }
-
-  if (!response.ok) {
-    throw new Error(`Upload failed: ${response.statusText}`)
-  }
 }
 
 export default function Dashboard(): JSX.Element {
@@ -104,10 +146,10 @@ export default function Dashboard(): JSX.Element {
     e.preventDefault()
     // client-side validation
     const nextErrors: Partial<Record<keyof EmailForm, string>> = {}
-    if (!form.recipient) nextErrors.recipient = 'Recipient email is required.'
-    else if (!emailRegex.test(form.recipient)) nextErrors.recipient = 'Invalid email format.'
-    if (!form.subject) nextErrors.subject = 'Subject is required.'
-    if (!form.message) nextErrors.message = 'Message body is required.'
+    if (!form.recipient) nextErrors.recipient = 'O e-mail do destinatário é obrigatório.'
+    else if (!emailRegex.test(form.recipient)) nextErrors.recipient = 'Formato de e-mail inválido.'
+    if (!form.subject) nextErrors.subject = 'O assunto é obrigatório.'
+    if (!form.message) nextErrors.message = 'A mensagem é obrigatória.'
 
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors)
@@ -117,11 +159,12 @@ export default function Dashboard(): JSX.Element {
     setSending(true)
     setSendResult(null)
     try {
-      await sendReportEmail(form) // TODO: wire to real API
-      setSendResult('Report sent successfully.')
+        const serverMsg = await sendReportEmail(form)
+        setSendResult(serverMsg || 'Relatório enviado com sucesso.')
       setForm({ recipient: '', subject: '', message: '' })
     } catch (err) {
-      setSendResult('Failed to send report.')
+        const errMsg = err instanceof Error ? err.message : String(err)
+        setSendResult(errMsg || 'Falha ao enviar relatório.')
     } finally {
       setSending(false)
     }
@@ -138,7 +181,7 @@ export default function Dashboard(): JSX.Element {
     const allowed = ['text/csv', 'application/json', 'text/plain']
     // Some CSVs may come as text/plain; allow by extension check as fallback
     if (!allowed.includes(f.type) && !/\.csv$/i.test(f.name) && !/\.json$/i.test(f.name)) {
-      setUploadResult('Only CSV or JSON files are accepted.')
+      setUploadResult('Apenas arquivos CSV ou JSON são aceitos.')
       setFile(null)
       setFileMeta(null)
       return
@@ -151,47 +194,83 @@ export default function Dashboard(): JSX.Element {
   async function handleUpload(e?: FormEvent) {
     e?.preventDefault()
     if (!file) {
-      setUploadResult('Please select a file first.')
+      setUploadResult('Por favor, selecione um arquivo primeiro.')
       return
     }
     setUploading(true)
     setProgress(0)
     setUploadResult(null)
     try {
-      await uploadFile(dataset, file, (p) => setProgress(p)) // TODO: integrate with backend
-      setUploadResult('Upload complete')
+      await uploadFile(dataset, file, (p) => setProgress(p))
+      setUploadResult('Upload completo')
       setFile(null)
       setFileMeta(null)
     } catch (err) {
-      setUploadResult('Upload failed')
+      setUploadResult('Falha no upload')
     } finally {
       setUploading(false)
     }
   }
 
   return (
-    <div style={{ padding: 16 }}>
-      <style>{`
-        .dashboard-grid { display: flex; flex-direction: column; gap: 16px; }
-        .card { border: 1px solid #e6e6e6; padding: 16px; border-radius: 8px; background: #fff; }
-        .card h2 { margin: 0 0 8px 0; font-size: 16px; }
-        .row { display:flex; gap:12px; align-items:center }
-        .muted { color: #666; font-size: 14px }
-        @media (min-width: 720px) {
-          .dashboard-grid { flex-direction: row }
-          .card { flex: 1 }
-        }
-        .progress { height: 8px; background: #f1f1f1; border-radius: 999px; overflow: hidden }
-        .progress > i { display:block; height:100%; background: #4f46e5; width:0% }
-      `}</style>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <h1 style={{ 
+        fontSize: '32px', 
+        fontWeight: 700, 
+        marginBottom: '8px',
+        color: '#f1f5f9'
+      }}>
+        Dashboard
+      </h1>
+      <p style={{ 
+        color: '#94a3b8', 
+        marginBottom: '32px',
+        fontSize: '16px'
+      }}>
+        Envie relatórios e faça upload de dados
+      </p>
 
-      <div className="dashboard-grid">
+      <div style={{ 
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))',
+        gap: '24px',
+        flex: 1
+      }}>
         {/* Section A: Send Report (Email) */}
-        <section className="card" aria-labelledby="send-report-title">
-          <h2 id="send-report-title">Send Report (Email)</h2>
+        <section 
+          style={{
+            backgroundColor: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: '16px',
+            padding: '24px',
+            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%'
+          }}
+          aria-labelledby="send-report-title"
+        >
+          <h2 
+            id="send-report-title"
+            style={{
+              fontSize: '20px',
+              fontWeight: 600,
+              marginBottom: '20px',
+              color: '#f1f5f9'
+            }}
+          >
+            📧 Enviar Relatório
+          </h2>
           <form onSubmit={handleSend}>
-            <label style={{ display: 'block', marginBottom: 8 }}>
-              <div style={{ fontSize: 14 }}>Recipient email</div>
+            <label style={{ display: 'block', marginBottom: '16px' }}>
+              <div style={{ 
+                fontSize: 14, 
+                fontWeight: 500, 
+                marginBottom: '8px',
+                color: '#374151'
+              }}>
+                E-mail do destinatário
+              </div>
               <input
                 name="recipient"
                 value={form.recipient}
@@ -200,92 +279,292 @@ export default function Dashboard(): JSX.Element {
                 aria-invalid={!!errors.recipient}
                 aria-describedby={errors.recipient ? 'recipient-error' : undefined}
                 required
-                style={{ width: '100%', padding: 8, marginTop: 6, borderRadius: 6, border: '1px solid #ddd' }}
+                placeholder="destinatario@exemplo.com"
+                style={{ 
+                  width: '100%', 
+                  padding: '12px', 
+                  borderRadius: '10px', 
+                  border: '1px solid #d1d5db',
+                  fontSize: '14px',
+                  outline: 'none',
+                  transition: 'all 0.2s'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#000000'
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0, 0, 0, 0.05)'
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#d1d5db'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
               />
             </label>
             {errors.recipient && (
-              <div id="recipient-error" style={{ color: 'crimson', marginBottom: 8 }} role="alert">
+              <div id="recipient-error" style={{ color: '#dc2626', marginBottom: '12px', fontSize: '13px' }} role="alert">
                 {errors.recipient}
               </div>
             )}
 
-            <label style={{ display: 'block', marginBottom: 8 }}>
-              <div style={{ fontSize: 14 }}>Subject</div>
+            <label style={{ display: 'block', marginBottom: '16px' }}>
+              <div style={{ 
+                fontSize: 14, 
+                fontWeight: 500, 
+                marginBottom: '8px',
+                color: '#374151'
+              }}>
+                Assunto
+              </div>
               <input
                 name="subject"
                 value={form.subject}
                 onChange={handleFormChange}
                 required
-                style={{ width: '100%', padding: 8, marginTop: 6, borderRadius: 6, border: '1px solid #ddd' }}
+                placeholder="Assunto do e-mail"
+                style={{ 
+                  width: '100%', 
+                  padding: '12px', 
+                  borderRadius: '10px', 
+                  border: '1px solid #d1d5db',
+                  fontSize: '14px',
+                  outline: 'none',
+                  transition: 'all 0.2s'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#000000'
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0, 0, 0, 0.05)'
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#d1d5db'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
               />
             </label>
-            {errors.subject && <div style={{ color: 'crimson' }}>{errors.subject}</div>}
+            {errors.subject && <div style={{ color: '#dc2626', marginBottom: '12px', fontSize: '13px' }}>{errors.subject}</div>}
 
-            <label style={{ display: 'block', marginBottom: 8 }}>
-              <div style={{ fontSize: 14 }}>Message</div>
+            <label style={{ display: 'block', marginBottom: '16px' }}>
+              <div style={{ 
+                fontSize: 14, 
+                fontWeight: 500, 
+                marginBottom: '8px',
+                color: '#cbd5e1'
+              }}>
+                Mensagem
+              </div>
               <textarea
                 name="message"
                 value={form.message}
                 onChange={handleFormChange}
                 required
                 rows={5}
-                style={{ width: '100%', padding: 8, marginTop: 6, borderRadius: 6, border: '1px solid #ddd' }}
+                placeholder="Digite sua mensagem..."
+                style={{ 
+                  width: '100%', 
+                  padding: '12px', 
+                  borderRadius: '10px', 
+                  border: '1px solid #d1d5db',
+                  fontSize: '14px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  resize: 'vertical',
+                  transition: 'all 0.2s'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#000000'
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0, 0, 0, 0.05)'
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#d1d5db'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
               />
             </label>
-            {errors.message && <div style={{ color: 'crimson' }}>{errors.message}</div>}
+            {errors.message && <div style={{ color: '#dc2626', marginBottom: '12px', fontSize: '13px' }}>{errors.message}</div>}
 
-            <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button type="submit" disabled={sending} style={{ padding: '8px 12px', borderRadius: 6 }}>
-                {sending ? 'Sending…' : 'Send Report'}
+            <div style={{ marginTop: '20px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <button 
+                type="submit" 
+                disabled={sending} 
+                style={{ 
+                  padding: '12px 24px', 
+                  borderRadius: '10px',
+                  backgroundColor: '#3b82f6',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  cursor: sending ? 'not-allowed' : 'pointer',
+                  opacity: sending ? 0.6 : 1,
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (!sending) e.currentTarget.style.backgroundColor = '#2563eb'
+                }}
+                onMouseLeave={(e) => {
+                  if (!sending) e.currentTarget.style.backgroundColor = '#3b82f6'
+                }}
+              >
+                {sending ? 'Enviando…' : 'Enviar Relatório'}
               </button>
-              <div aria-live="polite" style={{ fontSize: 14 }}>
-                {sendResult && <span className="muted">{sendResult}</span>}
-              </div>
+              {sendResult && (
+                <span style={{ 
+                  fontSize: 14,
+                  color: sendResult.includes('sucesso') ? '#059669' : '#dc2626'
+                }}>
+                  {sendResult}
+                </span>
+              )}
             </div>
           </form>
         </section>
 
         {/* Section B: Upload Data */}
-        <section className="card" aria-labelledby="upload-data-title">
-          <h2 id="upload-data-title">Upload Data</h2>
+        <section 
+          style={{
+            backgroundColor: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: '16px',
+            padding: '24px',
+            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%'
+          }}
+          aria-labelledby="upload-data-title"
+        >
+          <h2 
+            id="upload-data-title"
+            style={{
+              fontSize: '20px',
+              fontWeight: 600,
+              marginBottom: '20px',
+              color: '#f1f5f9'
+            }}
+          >
+            📤 Upload de Dados
+          </h2>
           <form onSubmit={handleUpload}>
-            <label style={{ display: 'block', marginBottom: 8 }}>
-              <div style={{ fontSize: 14 }}>Dataset type</div>
-              <select value={dataset} onChange={(e) => setDataset(e.target.value as DatasetType)} style={{ marginTop: 6, padding: 8, borderRadius: 6 }}>
-                <option value="sales">Sales</option>
-                <option value="inventory">Inventory</option>
+            <label style={{ display: 'block', marginBottom: '16px' }}>
+              <div style={{ 
+                fontSize: 14, 
+                fontWeight: 500, 
+                marginBottom: '8px',
+                color: '#cbd5e1'
+              }}>
+                Tipo de conjunto de dados
+              </div>
+              <select 
+                value={dataset} 
+                onChange={(e) => setDataset(e.target.value as DatasetType)} 
+                style={{ 
+                  width: '100%',
+                  padding: '12px', 
+                  borderRadius: '10px',
+                  border: '1px solid #475569',
+                  fontSize: '14px',
+                  backgroundColor: '#0f172a',
+                  color: '#f1f5f9',
+                  cursor: 'pointer',
+                  outline: 'none'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#64748b'
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#475569'
+                }}
+              >
+                <option value="sales">Vendas</option>
+                <option value="inventory">Estoque</option>
               </select>
             </label>
 
-            <label style={{ display: 'block', marginBottom: 8 }}>
-              <div style={{ fontSize: 14 }}>File (CSV or JSON)</div>
-              <input type="file" accept=".csv,application/json,text/csv" onChange={handleFileChange} style={{ marginTop: 6 }} />
+            <label style={{ display: 'block', marginBottom: '16px' }}>
+              <div style={{ 
+                fontSize: 14, 
+                fontWeight: 500, 
+                marginBottom: '8px',
+                color: '#cbd5e1'
+              }}>
+                Arquivo (CSV ou JSON)
+              </div>
+              <input 
+                type="file" 
+                accept=".csv,application/json,text/csv" 
+                onChange={handleFileChange} 
+                style={{ 
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  border: '1px solid #d1d5db',
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              />
             </label>
 
             {fileMeta && (
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 14 }}>Selected file</div>
-                <div className="row" style={{ marginTop: 6 }}>
-                  <div>
-                    <div><strong>{fileMeta.name}</strong></div>
-                    <div className="muted">{(fileMeta.size / 1024).toFixed(1)} KB • {fileMeta.type || 'unknown'}</div>
-                  </div>
+              <div style={{ 
+                marginBottom: '16px',
+                padding: '12px',
+                backgroundColor: '#0f172a',
+                borderRadius: '10px',
+                border: '1px solid #475569'
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 500, marginBottom: '6px', color: '#f1f5f9' }}>
+                  Arquivo selecionado
+                </div>
+                <div style={{ fontSize: 13, color: '#cbd5e1' }}>
+                  <strong>{fileMeta.name}</strong>
+                </div>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: '4px' }}>
+                  {(fileMeta.size / 1024).toFixed(1)} KB • {fileMeta.type || 'desconhecido'}
                 </div>
               </div>
             )}
 
-            <div style={{ marginBottom: 8 }}>
-              <div className="progress" aria-hidden>
-                <i style={{ width: `${progress}%` }} />
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                height: 8, 
+                backgroundColor: '#334155', 
+                borderRadius: 999, 
+                overflow: 'hidden'
+              }}>
+                <div style={{ 
+                  height: '100%', 
+                  backgroundColor: '#3b82f6', 
+                  width: `${progress}%`,
+                  transition: 'width 0.3s'
+                }} />
               </div>
-              <div style={{ fontSize: 13, marginTop: 6 }} aria-live="polite">
-                {uploading ? `Uploading… ${progress}%` : uploadResult ? uploadResult : ''}
+              <div style={{ fontSize: 13, marginTop: '8px', color: '#94a3b8' }}>
+                {uploading ? `Enviando… ${progress}%` : uploadResult ? uploadResult : ''}
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="submit" disabled={uploading} style={{ padding: '8px 12px', borderRadius: 6 }}>
-                {uploading ? 'Uploading…' : 'Upload'}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                type="submit" 
+                disabled={uploading} 
+                style={{ 
+                  padding: '12px 24px', 
+                  borderRadius: '10px',
+                  backgroundColor: '#3b82f6',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  cursor: uploading ? 'not-allowed' : 'pointer',
+                  opacity: uploading ? 0.6 : 1,
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (!uploading) e.currentTarget.style.backgroundColor = '#2563eb'
+                }}
+                onMouseLeave={(e) => {
+                  if (!uploading) e.currentTarget.style.backgroundColor = '#3b82f6'
+                }}
+              >
+                {uploading ? 'Enviando…' : 'Upload'}
               </button>
               <button
                 type="button"
@@ -295,16 +574,30 @@ export default function Dashboard(): JSX.Element {
                   setUploadResult(null)
                   setProgress(0)
                 }}
-                style={{ padding: '8px 12px', borderRadius: 6 }}
+                style={{ 
+                  padding: '12px 24px', 
+                  borderRadius: '10px',
+                  backgroundColor: 'transparent',
+                  color: '#cbd5e1',
+                  border: '1px solid #475569',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#334155'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent'
+                }}
               >
-                Clear
+                Limpar
               </button>
             </div>
           </form>
         </section>
       </div>
-
-      {/* TODO: Wire into shared notification system or form validation library as needed. */}
     </div>
   )
 }
