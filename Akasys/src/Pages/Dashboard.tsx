@@ -1,4 +1,5 @@
-import React, { useState, ChangeEvent, FormEvent } from 'react'
+import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react'
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 // Exported helper types
 export type DatasetType = 'sales' | 'inventory'
@@ -19,11 +20,42 @@ export function getFileMetadata(file: File): FileMetadata {
   return { name: file.name, size: file.size, type: file.type }
 }
 
+// Format timestamp to readable date
+function formatTimestamp(timestamp: string | number): string {
+  try {
+    const date = new Date(timestamp)
+    if (isNaN(date.getTime())) return String(timestamp)
+    
+    const month = date.toLocaleString('pt-BR', { month: 'short' })
+    const year = date.getFullYear()
+    return `${month.charAt(0).toUpperCase() + month.slice(1)}/${year}`
+  } catch {
+    return String(timestamp)
+  }
+}
+
 // API Base URL and endpoints from environment
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api-6-semestre-backend.onrender.com'
 const RELATORIOS_ENDPOINT = import.meta.env.VITE_RELATORIOS_ENDPOINT || '/relatorios/enviar'
 const UPLOAD_ENDPOINT = import.meta.env.VITE_UPLOAD_ENDPOINT || '/upload'
 const AUTH_TOKEN_KEY = import.meta.env.VITE_AUTH_TOKEN_KEY || 'auth_token'
+const DASH_TOP_PRODUTOS = import.meta.env.VITE_DASH_TOP_PRODUTOS || '/dash/top-produtos'
+const DASH_VENDAS_MENSAIS = import.meta.env.VITE_DASH_VENDAS_MENSAIS || '/dash/vendas-mensais'
+const DASH_ESTOQUE_CLIENTES = import.meta.env.VITE_DASH_ESTOQUE_CLIENTES || '/dash/estoque-clientes'
+
+// Fetch dashboard data
+async function fetchDashboardData<T>(endpoint: string): Promise<T> {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY)
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    headers: {
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    }
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${endpoint}`)
+  }
+  return response.json()
+}
 
 // Send report email to backend (improved error extraction)
 export async function sendReportEmail(form: EmailForm): Promise<string> {
@@ -132,6 +164,110 @@ export default function Dashboard(): JSX.Element {
   const [progress, setProgress] = useState(0)
   const [uploadResult, setUploadResult] = useState<string | null>(null)
 
+  // Dashboard data state
+  const [topProdutos, setTopProdutos] = useState<any[]>([])
+  const [vendasMensais, setVendasMensais] = useState<any[]>([])
+  const [estoqueClientes, setEstoqueClientes] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Load dashboard data on mount
+  useEffect(() => {
+    async function loadDashboardData() {
+      setLoading(true)
+      
+      // Mock data as fallback
+      const mockProdutos = [
+        { produto: 'Produto A', quantidade: 150 },
+        { produto: 'Produto B', quantidade: 120 },
+        { produto: 'Produto C', quantidade: 95 },
+        { produto: 'Produto D', quantidade: 80 },
+        { produto: 'Produto E', quantidade: 65 }
+      ]
+      const mockVendas = [
+        { mes: 'Jan', total: 15000 },
+        { mes: 'Fev', total: 18000 },
+        { mes: 'Mar', total: 22000 },
+        { mes: 'Abr', total: 19500 },
+        { mes: 'Mai', total: 25000 },
+        { mes: 'Jun', total: 28000 }
+      ]
+      const mockEstoque = [
+        { cliente: 'Cliente A', quantidade: 500 },
+        { cliente: 'Cliente B', quantidade: 300 },
+        { cliente: 'Cliente C', quantidade: 250 },
+        { cliente: 'Cliente D', quantidade: 180 },
+        { cliente: 'Cliente E', quantidade: 120 }
+      ]
+
+      try {
+        // Fetch all endpoints in parallel
+        const [produtos, vendas, estoque] = await Promise.all([
+          fetchDashboardData<any>(DASH_TOP_PRODUTOS + '?limit=5').catch(() => null),
+          fetchDashboardData<any>(DASH_VENDAS_MENSAIS).catch(() => null),
+          fetchDashboardData<any>(DASH_ESTOQUE_CLIENTES).catch(() => null)
+        ])
+        
+        console.log('📊 Top Produtos (raw):', produtos)
+        console.log('📈 Vendas Mensais (raw):', vendas)
+        console.log('🏢 Estoque Clientes (raw):', estoque)
+        
+        // Parse top produtos - normalize property names
+        let produtosData = mockProdutos
+        if (produtos) {
+          const rawData = produtos.value || produtos.data || (Array.isArray(produtos) ? produtos : [])
+          if (rawData.length > 0) {
+            produtosData = rawData.map((item: any) => ({
+              produto: item.produto || item.name || item.product || 'Desconhecido',
+              quantidade: item.total_vendido || item.quantidade || item.quantity || item.total || 0
+            }))
+          }
+        }
+        
+        // Parse vendas mensais - format timestamps
+        let vendasData = mockVendas
+        if (vendas) {
+          const rawData = vendas.value || vendas.data || (Array.isArray(vendas) ? vendas : [])
+          if (rawData.length > 0) {
+            vendasData = rawData.map((item: any) => ({
+              mes: item.mes ? formatTimestamp(item.mes) : (item.month || item.date || 'N/A'),
+              total: item.total_vendido || item.total || item.value || item.vendas || 0
+            }))
+          }
+        }
+        
+        // Parse estoque por cliente - normalize
+        let estoqueData = mockEstoque
+        if (estoque) {
+          const rawData = estoque.value || estoque.data || (Array.isArray(estoque) ? estoque : [])
+          if (rawData.length > 0) {
+            estoqueData = rawData.map((item: any) => ({
+              cliente: String(item.cliente || item.client || item.customer || item.id || 'ID'),
+              quantidade: item.total_estoque || item.quantidade || item.quantity || item.stock || 0
+            }))
+          }
+        }
+        
+        console.log('📊 Top Produtos (parsed):', produtosData)
+        console.log('📈 Vendas Mensais (parsed):', vendasData)
+        console.log('🏢 Estoque Clientes (parsed):', estoqueData)
+        
+        setTopProdutos(produtosData)
+        setVendasMensais(vendasData)
+        setEstoqueClientes(estoqueData)
+        
+      } catch (err) {
+        console.error('❌ Erro crítico ao carregar dashboard:', err)
+        // Use mock data on critical error
+        setTopProdutos(mockProdutos)
+        setVendasMensais(mockVendas)
+        setEstoqueClientes(mockEstoque)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadDashboardData()
+  }, [])
+
   // Basic email regex for client-side check (simple, not RFC-complete)
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -213,7 +349,7 @@ export default function Dashboard(): JSX.Element {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
       <h1 style={{ 
         fontSize: '32px', 
         fontWeight: 700, 
@@ -227,8 +363,149 @@ export default function Dashboard(): JSX.Element {
         marginBottom: '32px',
         fontSize: '16px'
       }}>
-        Envie relatórios e faça upload de dados
+        Visualize métricas, envie relatórios e faça upload de dados
       </p>
+
+      {/* Charts Section */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+          Carregando gráficos...
+        </div>
+      ) : (
+        <div style={{ 
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+          gap: '24px',
+          marginBottom: '32px'
+        }}>
+          {/* Top Produtos */}
+          <section 
+            style={{
+              backgroundColor: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: '16px',
+              padding: '24px',
+              boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.3)'
+            }}
+          >
+            <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '20px', color: '#f1f5f9' }}>
+              📊 Top Produtos
+            </h3>
+            {topProdutos.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
+                Nenhum dado disponível
+              </div>
+            ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={topProdutos}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis 
+                  dataKey="produto" 
+                  stroke="#94a3b8" 
+                  tick={{ fill: '#94a3b8', fontSize: 12 }} 
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                />
+                <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8' }} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}
+                  labelStyle={{ color: '#f1f5f9' }}
+                />
+                <Legend wrapperStyle={{ color: '#94a3b8' }} />
+                <Bar dataKey="quantidade" fill="#3b82f6" name="Quantidade" />
+              </BarChart>
+            </ResponsiveContainer>
+            )}
+          </section>
+
+          {/* Vendas Mensais */}
+          <section 
+            style={{
+              backgroundColor: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: '16px',
+              padding: '24px',
+              boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.3)'
+            }}
+          >
+            <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '20px', color: '#f1f5f9' }}>
+              📈 Vendas Mensais
+            </h3>
+            {vendasMensais.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
+                Nenhum dado disponível
+              </div>
+            ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={vendasMensais}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis 
+                  dataKey="mes" 
+                  stroke="#94a3b8" 
+                  tick={{ fill: '#94a3b8', fontSize: 12 }} 
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                />
+                <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8' }} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}
+                  labelStyle={{ color: '#f1f5f9' }}
+                />
+                <Legend wrapperStyle={{ color: '#94a3b8' }} />
+                <Line type="monotone" dataKey="total" stroke="#10b981" strokeWidth={2} name="Total de Vendas" />
+              </LineChart>
+            </ResponsiveContainer>
+            )}
+          </section>
+
+          {/* Estoque por Cliente */}
+          <section 
+            style={{
+              backgroundColor: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: '16px',
+              padding: '24px',
+              boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.3)'
+            }}
+          >
+            <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '20px', color: '#f1f5f9' }}>
+              🏢 Estoque por Cliente
+            </h3>
+            {estoqueClientes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
+                Nenhum dado disponível
+              </div>
+            ) : (
+            <ResponsiveContainer width="100%" height={350}>
+              <PieChart>
+                <Pie
+                  data={estoqueClientes.slice(0, 8)}
+                  dataKey="quantidade"
+                  nameKey="cliente"
+                  cx="50%"
+                  cy="45%"
+                  outerRadius={90}
+                  label
+                >
+                  {estoqueClientes.slice(0, 8).map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'][index % 8]} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}
+                />
+                <Legend 
+                  wrapperStyle={{ fontSize: '11px' }}
+                  iconSize={10}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            )}
+          </section>
+        </div>
+      )}
 
       <div style={{ 
         display: 'grid',

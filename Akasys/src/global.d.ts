@@ -15,6 +15,9 @@ interface ImportMetaEnv {
   readonly VITE_DEFAULT_SKIP: string
   readonly VITE_DEFAULT_LIMIT: string
   readonly VITE_MAX_LIMIT: string
+  readonly VITE_DASH_TOP_PRODUTOS: string
+  readonly VITE_DASH_VENDAS_MENSAIS: string
+  readonly VITE_DASH_ESTOQUE_CLIENTES: string
 }
 
 interface ImportMeta {
