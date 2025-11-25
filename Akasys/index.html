@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Akasys App</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        background-color: #0f172a;
+        color: #e2e8f0;
+        min-height: 100vh;
+      }
+
+      /* Navegação responsiva */
+      @media (min-width: 640px) {
+        #main-navigation { 
+          display: block !important; 
+        }
+        #main-navigation ul { 
+          flex-direction: row; 
+          gap: 12px; 
+          align-items: center; 
+        }
+        #main-navigation ul li a { 
+          padding: 8px 12px; 
+        }
+        button[aria-controls="main-navigation"] { 
+          display: none; 
+        }
+      }
+
+      /* Focus styles */
+      a:focus, button:focus { 
+        outline: 3px solid rgba(59,130,246,0.5); 
+        outline-offset: 2px; 
+      }
+
+      /* Link hover */
+      a:hover {
+        background-color: #1e293b;
+      }
+
+      /* Inputs e textareas dark mode */
+      input, textarea, select {
+        background-color: #1e293b;
+        color: #e2e8f0;
+        border: 1px solid #334155 !important;
+      }
+
+      input:focus, textarea:focus, select:focus {
+        outline: 2px solid #3b82f6;
+        border-color: #3b82f6 !important;
+      }
+
+      /* Buttons dark mode */
+      button {
+        background-color: #3b82f6;
+        color: white;
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      button:hover:not(:disabled) {
+        background-color: #2563eb;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* Cards dark mode */
+      .card {
+        background-color: #1e293b !important;
+        border-color: #334155 !important;
+      }
+
+      /* Tables dark mode */
+      .table th {
+        background-color: #1e293b;
+        color: #e2e8f0;
+        border-color: #334155 !important;
+      }
+
+      .table td {
+        border-color: #334155 !important;
+      }
+
+      .table tr:hover {
+        background-color: #1e293b;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

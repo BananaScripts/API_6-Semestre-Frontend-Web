@@ -1,0 +1,6 @@
+data|cod_cliente|cod_produto|es_centro|tipo_material|origem|lote|dias_em_estoque|produto|grupo_mercadoria|es_totalestoque|SKU
+2025-09-30|1|TEST-001|SP01|Acabado|Fábrica X|L001|5|Produto Teste|Grupo T|10.5|SKU-TEST
+2025-09-01|12|PRD-001|SP01|Acabado|Fábrica A|L001|10|Produto Alpha|Grupo A|150.75|SKU-ALPHA
+2025-09-05|7|PRD-002|RJ02|Acabado|Fábrica B|L002|3|Produto Beta|Grupo B|89.40|SKU-BETA
+2025-09-10|345|PRD-003|MG01|Matéria Prima|Fábrica C|L003|25|Produto Gama|Grupo MP|1020.00|SKU-GAMA
+2025-09-12|88|PRD-004|SP01|Acabado|Centro D|L004|0|Produto Delta|Grupo A|12.5|SKU-DELTA
