@@ -31,62 +31,92 @@ function createWsWrapper(onMessage: (msg: ChatMessage) => void) {
     isManuallyClosed = false
     return new Promise<void>((resolve, reject) => {
       try {
-        // TODO: attach token if required, e.g. `${WS_URL}?token=${authToken}`
         ws = new WebSocket(WS_URL)
+
         ws.onopen = () => {
           reconnectAttempts = 0
+          console.log('[WS] Conectado a:', WS_URL)
           resolve()
         }
+
         ws.onmessage = (ev) => {
           try {
-            const data = JSON.parse(ev.data)
-            // Backend returns an object like {
-            //   pergunta_original, match_intencao, answer
-            // }
-            // Normalize to ChatMessage shape used by the UI.
+            let raw = ev.data
+
+            // remove BOM + espaços + quebras
+            if (typeof raw === 'string') {
+              raw = raw.trim().replace(/^\uFEFF/, '')
+            }
+
+            let data
+            try {
+              data = JSON.parse(raw)
+              if (typeof data === 'string' && data.startsWith('{') && data.endsWith('}')) {
+                data = JSON.parse(data)
+              }
+            } catch {
+              // Não é JSON → tratar como texto simples
+              onMessage({
+                id: String(Math.random()),
+                text: String(raw),
+                sender: 'system',
+                ts: Date.now()
+              })
+              return
+            }
+
             let text = ''
-            if (typeof data === 'string') {
+            if (data.answer && data.answer.erro) {
+              text = String(data.answer.erro);
+            }
+            else if (typeof data === 'string') {
               text = data
+
             } else if (data.answer) {
-              text = data.answer
+              if (data.answer.resposta) {
+                if (Array.isArray(data.answer.resposta)) {
+                  text = data.answer.resposta.join('\n')
+                } else {
+                  text = String(data.answer.resposta)
+                }
+              } else {
+                text = JSON.stringify(data.answer)
+              }
+
+            } else if (data.erro) {
+              text = String(data.erro)
+
             } else if (data.text) {
               text = data.text
+
             } else {
               text = JSON.stringify(data)
             }
 
-            const msg: ChatMessage = {
-              id: (data && data.id) || String(Date.now()) + Math.random().toString(36).slice(2),
+            onMessage({
+              id: data.id || String(Date.now()) + Math.random().toString(36).slice(2),
               text,
               sender: 'system',
-              ts: (data && data.ts) || Date.now()
-            }
-            onMessage(msg)
-          } catch (err) {
-            // If message is plain text, wrap it
-            onMessage({ id: String(Math.random()), text: String(ev.data), sender: 'system', ts: Date.now() })
+              ts: data.ts || Date.now()
+            })
+
+          } catch {
+            onMessage({
+              id: String(Math.random()),
+              text: String(ev.data),
+              sender: 'system',
+              ts: Date.now()
+            })
           }
         }
-        ws.onclose = () => {
-          ws = null
-          if (!isManuallyClosed) {
-            // attempt reconnect
-            if (reconnectAttempts < MAX_RECONNECT) {
-              reconnectAttempts += 1
-              const backoff = 500 * reconnectAttempts
-              setTimeout(() => open().catch(() => {}), backoff)
-            }
-          }
-        }
-        ws.onerror = (err) => {
-          // let the caller handle connection errors via component state
-          // console.warn('ws error', err)
-        }
+
+
       } catch (err) {
         reject(err)
       }
     })
   }
+
 
   function close() {
     isManuallyClosed = true
@@ -174,23 +204,23 @@ export default function Chat(): JSX.Element {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <h1 style={{ 
-        fontSize: '32px', 
-        fontWeight: 700, 
+      <h1 style={{
+        fontSize: '32px',
+        fontWeight: 700,
         marginBottom: '8px',
         color: '#f1f5f9'
       }}>
         Chat
       </h1>
-      <p style={{ 
-        color: '#94a3b8', 
+      <p style={{
+        color: '#94a3b8',
         marginBottom: '32px',
         fontSize: '16px'
       }}>
         Converse com o assistente
       </p>
 
-      <div 
+      <div
         style={{
           backgroundColor: '#1e293b',
           border: '1px solid #334155',
@@ -201,8 +231,8 @@ export default function Chat(): JSX.Element {
           minHeight: 0,
           boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.3)'
         }}
-        role="region" 
-        aria-label="Chat" 
+        role="region"
+        aria-label="Chat"
         aria-live="polite"
       >
         <div
@@ -217,8 +247,8 @@ export default function Chat(): JSX.Element {
           }}
         >
           {messages.length === 0 && (
-            <div style={{ 
-              color: '#64748b', 
+            <div style={{
+              color: '#64748b',
               textAlign: 'center',
               paddingTop: '40px',
               fontSize: '14px'
@@ -227,8 +257,8 @@ export default function Chat(): JSX.Element {
             </div>
           )}
           {messages.map((m) => (
-            <div 
-              key={m.id} 
+            <div
+              key={m.id}
               style={{
                 marginBottom: '20px',
                 display: 'flex',
@@ -243,7 +273,7 @@ export default function Chat(): JSX.Element {
                 gap: '8px',
                 marginBottom: '6px'
               }}>
-                <strong style={{ 
+                <strong style={{
                   fontSize: '14px',
                   color: m.sender === 'user' ? '#f1f5f9' : '#94a3b8'
                 }}>
@@ -307,9 +337,9 @@ export default function Chat(): JSX.Element {
               e.currentTarget.style.boxShadow = 'none'
             }}
           />
-          <button 
-            onClick={sendCurrent} 
-            disabled={!connected || !input.trim()} 
+          <button
+            onClick={sendCurrent}
+            disabled={!connected || !input.trim()}
             aria-disabled={!connected}
             style={{
               padding: '12px 24px',
@@ -339,8 +369,8 @@ export default function Chat(): JSX.Element {
         </div>
       </div>
 
-      <div style={{ 
-        marginTop: '16px', 
+      <div style={{
+        marginTop: '16px',
         fontSize: '13px',
         color: '#94a3b8',
         display: 'flex',
